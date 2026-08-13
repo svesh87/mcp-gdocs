@@ -28,11 +28,20 @@ const (
 // with the placeholders around it.
 const defaultMargin = 457200
 
-// geometryMask reads what placing an element needs: the page size, every element's box
-// and transform, and — for tables — the column widths and row heights that are their real
-// size.
-const geometryMask = "pageSize,slides(objectId,pageElements(objectId,size,transform," +
-	"table(rows,columns,tableColumns(columnWidth),tableRows(rowHeight))))"
+// geometryElements is one page's worth of what a placement needs: every element's box and
+// transform, and — for tables — the column widths and row heights that are their real size.
+const geometryElements = "objectId,pageElements(objectId,size,transform," +
+	"table(rows,columns,tableColumns(columnWidth),tableRows(rowHeight)))"
+
+// geometryMask reads the page size and the geometry of every page there is — slides,
+// layouts and the master.
+//
+// The layouts are the point. A deck gets its grid from them: move the title on the layout
+// and every slide that follows it moves, including the ones a person adds in the browser
+// tomorrow. Moving the same title slide by slide leaves the template saying one thing and
+// the deck doing another.
+const geometryMask = "pageSize,slides(" + geometryElements + "),layouts(" + geometryElements +
+	"),masters(" + geometryElements + ")"
 
 // tableMask reads the tables on every slide: cells, spans, column widths, row heights and
 // the style of the text inside, which is what reproducing a sample's table needs.
@@ -63,7 +72,11 @@ func (r *registry) registerSlidesLayout(srv *server.MCPServer) {
 		mcp.WithDescription("Move or resize anything on a slide — a text box, a table, a picture — by naming "+
 			"where it should sit rather than by inventing coordinates. Align it against an edge of the "+
 			"slide or centre it, with a margin, and the tool works the numbers out from the slide's own "+
-			"size and the element's own box. Exact positions in EMU are accepted too."),
+			"size and the element's own box. Exact positions in EMU are accepted too. "+
+			"An element of a layout or of the master moves the same way, by its identifier from "+
+			"gdocs_slides_read_theme, and that is where a deck's grid belongs: a title moved on the "+
+			"layout moves on every slide that follows it, including the ones added later in the browser, "+
+			"while the same move made slide by slide is undone by the next slide somebody adds."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
 		mcp.WithString("object_id", mcp.Required(), mcp.Description("Element to move.")),
 		mcp.WithString("align", mcp.Description("LEFT, CENTER or RIGHT, against the slide.")),
@@ -298,9 +311,32 @@ func (r *registry) slidesDelete(ctx context.Context, req mcp.CallToolRequest) (*
 			}
 		}
 
+		// A band or a rule put on a layout is part of the template and comes off the same
+		// way it went on. The layout itself is not on the table: it is not a slide, and
+		// removing one takes every slide that follows it with it.
 		if kind == "" {
-			return toolError(fmt.Errorf("no slide or element %s in this presentation: "+
-				"read the identifiers with gdocs_slides_list and pass them exactly", objectID)), nil
+			for _, page := range append(append([]google.Page{}, presentation.Layouts...), presentation.Masters...) {
+				if page.ObjectID == objectID {
+					return toolError(fmt.Errorf("%s is a layout or the master, not something on one; "+
+						"a layout cannot be removed here, and removing it would take every slide "+
+						"that follows it", objectID)), nil
+				}
+				for _, element := range page.PageElements {
+					if element.ObjectID == objectID {
+						kind = elementKind(element)
+						break
+					}
+				}
+				if kind != "" {
+					break
+				}
+			}
+		}
+
+		if kind == "" {
+			return toolError(fmt.Errorf("no slide, or element of a slide, a layout or the master, "+
+				"named %s in this presentation: read the identifiers with gdocs_slides_list or "+
+				"gdocs_slides_read_theme and pass them exactly", objectID)), nil
 		}
 
 		if kind == "slide" {
@@ -1623,17 +1659,25 @@ func boxArgs(req mcp.CallToolRequest) (box, error) {
 
 // findElement locates any element, not just a shape: a table or a picture is placed as
 // readily as a text box.
+//
+// Slides first, then the layouts and the master, because that is the order of how often an
+// identifier belongs to each — and because a layout's placeholder has to be findable at all:
+// it is the only way a template's grid can be changed in one place instead of on every
+// slide. Whether the page carrying an element is a slide makes no difference to the request
+// that moves it.
 func findElement(presentation *google.Presentation, objectID string) (*google.Page, *google.PageElement, error) {
-	for pageIndex := range presentation.Slides {
-		page := &presentation.Slides[pageIndex]
-		for elementIndex := range page.PageElements {
-			if page.PageElements[elementIndex].ObjectID == objectID {
-				return page, &page.PageElements[elementIndex], nil
+	for _, pages := range [][]google.Page{presentation.Slides, presentation.Layouts, presentation.Masters} {
+		for pageIndex := range pages {
+			page := &pages[pageIndex]
+			for elementIndex := range page.PageElements {
+				if page.PageElements[elementIndex].ObjectID == objectID {
+					return page, &page.PageElements[elementIndex], nil
+				}
 			}
 		}
 	}
 
-	return nil, nil, fmt.Errorf("no object %s on any slide of this presentation", objectID)
+	return nil, nil, fmt.Errorf("no object %s on any slide, layout or master of this presentation", objectID)
 }
 
 // placement is a transform taken apart into the things a caller reasons about: where the

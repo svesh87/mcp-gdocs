@@ -660,6 +660,147 @@ func TestCreateLineRefusals(t *testing.T) {
 	}
 }
 
+// presentationWithLayoutGrid is the smallest deck that has a title on a layout: the grid a
+// template imposes lives there, not on any slide.
+const presentationWithLayoutGrid = `{
+  "presentationId": "deck",
+  "pageSize": {"width": {"magnitude": 9144000, "unit": "EMU"}, "height": {"magnitude": 5143500, "unit": "EMU"}},
+  "slides": [
+    {
+      "objectId": "slide1",
+      "pageElements": [
+        {
+          "objectId": "body1",
+          "size": {"width": {"magnitude": 4000000, "unit": "EMU"}, "height": {"magnitude": 1000000, "unit": "EMU"}},
+          "transform": {"scaleX": 1, "scaleY": 1, "translateX": 311700, "translateY": 1152475, "unit": "EMU"},
+          "shape": {"shapeType": "TEXT_BOX"}
+        }
+      ]
+    }
+  ],
+  "layouts": [
+    {
+      "objectId": "layout_body",
+      "pageElements": [
+        {
+          "objectId": "layout_title",
+          "size": {"width": {"magnitude": 8520600, "unit": "EMU"}, "height": {"magnitude": 572700, "unit": "EMU"}},
+          "transform": {"scaleX": 1, "scaleY": 1, "translateX": 311700, "translateY": 445025, "unit": "EMU"},
+          "shape": {"shapeType": "TEXT_BOX", "placeholder": {"type": "TITLE"}}
+        }
+      ]
+    }
+  ],
+  "masters": [
+    {
+      "objectId": "master",
+      "pageElements": [
+        {
+          "objectId": "master_number",
+          "size": {"width": {"magnitude": 548700, "unit": "EMU"}, "height": {"magnitude": 393600, "unit": "EMU"}},
+          "transform": {"scaleX": 1, "scaleY": 1, "translateX": 8472457, "translateY": 4663216, "unit": "EMU"},
+          "shape": {"shapeType": "TEXT_BOX", "placeholder": {"type": "SLIDE_NUMBER"}}
+        }
+      ]
+    }
+  ]
+}`
+
+// TestPlaceElementMovesALayoutPlaceholder is the difference between a template and a deck
+// that merely looks like one. A grid set slide by slide is undone by the next slide somebody
+// adds in the browser: that one comes off the layout, where the title never moved.
+func TestPlaceElementMovesALayoutPlaceholder(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).
+		answer("/presentations/deck:batchUpdate", emptyBatchReply).
+		answer("/presentations/deck", presentationWithLayoutGrid))
+
+	answer := h.ok(h.registry.slidesPlaceElement(context.Background(), request(map[string]any{
+		"presentation_id": "deck",
+		"object_id":       "layout_title",
+		"x_emu":           float64(381000),
+		"y_emu":           float64(190500),
+		"height_emu":      float64(476400),
+	})))
+
+	if !strings.Contains(answer, `"y_emu": 190500`) {
+		t.Errorf("the layout's title should move to the given place, got %s", answer)
+	}
+
+	body := string(h.bodyOf(t, 1))
+	if !strings.Contains(body, "layout_title") {
+		t.Errorf("the request should name the layout's element, got %s", body)
+	}
+}
+
+// TestPlaceElementMovesAMasterPlaceholder covers the page every layout inherits from. The
+// slide number sits there and nowhere else, so a deck that wants it elsewhere has no other
+// place to move it from.
+func TestPlaceElementMovesAMasterPlaceholder(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).
+		answer("/presentations/deck:batchUpdate", emptyBatchReply).
+		answer("/presentations/deck", presentationWithLayoutGrid))
+
+	answer := h.ok(h.registry.slidesPlaceElement(context.Background(), request(map[string]any{
+		"presentation_id": "deck",
+		"object_id":       "master_number",
+		"x_emu":           float64(200000),
+		"y_emu":           float64(4700000),
+	})))
+
+	if !strings.Contains(answer, `"x_emu": 200000`) {
+		t.Errorf("the master's slide number should move, got %s", answer)
+	}
+}
+
+// TestPlaceElementSaysWhereItLooked keeps the refusal honest now that it looks in three
+// kinds of page rather than one.
+func TestPlaceElementSaysWhereItLooked(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).answer("/presentations/deck", presentationWithLayoutGrid))
+
+	message := h.fail(h.registry.slidesPlaceElement(context.Background(), request(map[string]any{
+		"presentation_id": "deck",
+		"object_id":       "nothing",
+		"x_emu":           float64(0),
+	})))
+
+	if !strings.Contains(message, "slide, layout or master") {
+		t.Errorf("the refusal should say every kind of page it searched, got %q", message)
+	}
+}
+
+// TestDeleteRemovesFurnitureFromALayout is the other half of putting it there: a band or a
+// rule added to a layout has to come off the same way, or a template can only ever grow.
+func TestDeleteRemovesFurnitureFromALayout(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).
+		answer("/presentations/deck:batchUpdate", emptyBatchReply).
+		answer("/presentations/deck", presentationWithLayoutGrid))
+
+	answer := h.ok(h.registry.slidesDelete(context.Background(), request(map[string]any{
+		"presentation_id": "deck",
+		"object_ids":      []any{"layout_title"},
+	})))
+
+	if !strings.Contains(answer, "layout_title") {
+		t.Errorf("the layout's element should be removed, got %s", answer)
+	}
+}
+
+// TestDeleteRefusesTheLayoutItself draws the line the deck cannot come back from: an
+// element on a layout is ordinary editing, the layout is what every slide following it
+// depends on.
+func TestDeleteRefusesTheLayoutItself(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).answer("/presentations/deck", presentationWithLayoutGrid))
+
+	message := h.fail(h.registry.slidesDelete(context.Background(), request(map[string]any{
+		"presentation_id": "deck",
+		"object_ids":      []any{"layout_body"},
+	})))
+
+	if !strings.Contains(message, "every slide that follows it") {
+		t.Errorf("the refusal should say what removing a layout would take with it, got %q", message)
+	}
+}
+
 // TestPlaceElementRotates pins the matrix a turn produces, because the angle is not a
 // field: it is spread across the same four numbers as the scale, and getting it wrong
 // puts the element somewhere else entirely rather than merely at the wrong angle.

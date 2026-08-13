@@ -26,6 +26,8 @@ slide is 9144000 × 5143500), **points** for font sizes and the space around par
 | what every slide on a layout looks like | `gdocs_slides_read_theme`, `gdocs_slides_list_layouts` | `gdocs_slides_style_layout` |
 | a new deck from a template | `gdocs_drive_search`, `gdocs_drive_file_info` | `gdocs_slides_copy_presentation` |
 | a new deck with no template behind it | — | `gdocs_slides_create`, then `set_theme_colors` and `style_layout` to build the look |
+| where the template puts a title, a body, a slide number | `gdocs_slides_read_theme` | `gdocs_slides_place_element` on the layout's or master's element — one move, every slide that follows it |
+| furniture on every slide of a layout: a band, a logo, a rule | `gdocs_slides_read_theme` (shapes only — it does not report pictures on a layout) | `gdocs_slides_create_shape`, `gdocs_slides_insert_image`, `gdocs_slides_set_page_background`, all on the layout's page |
 | the notes behind a slide | `gdocs_slides_inspect_page` (`speaker_notes`) | `gdocs_slides_set_speaker_notes` |
 
 ## The slide

@@ -1,0 +1,19 @@
+{
+  "requests": [
+    {
+      "addProtectedRange": {
+        "protectedRange": {
+          "range": {
+            "sheetId": 77,
+            "startRowIndex": 0,
+            "endRowIndex": 1,
+            "startColumnIndex": 0,
+            "endColumnIndex": 5
+          },
+          "description": "шапка",
+          "warningOnly": true
+        }
+      }
+    }
+  ]
+}

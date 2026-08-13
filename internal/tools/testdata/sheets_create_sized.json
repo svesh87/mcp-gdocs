@@ -1,0 +1,24 @@
+{
+  "properties": {
+    "title": "Цели",
+    "locale": "ru_RU",
+    "timeZone": "Europe/Moscow"
+  },
+  "sheets": [
+    {
+      "properties": {
+        "title": "Цели",
+        "gridProperties": {
+          "rowCount": 993,
+          "columnCount": 31,
+          "frozenRowCount": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "title": "заметки"
+      }
+    }
+  ]
+}

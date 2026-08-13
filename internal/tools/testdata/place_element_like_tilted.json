@@ -1,0 +1,19 @@
+{
+  "requests": [
+    {
+      "updatePageElementTransform": {
+        "objectId": "panel1",
+        "transform": {
+          "scaleX": 0.43301270189055485,
+          "scaleY": 0.43301270189055485,
+          "shearX": -0.24999999999903896,
+          "shearY": 0.24999999999903896,
+          "translateX": 1258974.5962145657,
+          "translateY": 1533493.6490556835,
+          "unit": "EMU"
+        },
+        "applyMode": "ABSOLUTE"
+      }
+    }
+  ]
+}

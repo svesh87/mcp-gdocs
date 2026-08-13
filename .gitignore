@@ -1,0 +1,13 @@
+tmp/
+.env
+*.local.md
+*.local/
+coverage.out
+
+# The OAuth client of the application and the token of whoever signed in. Neither is ever
+# committed: the first is shared out of band with the people allowed to run this server,
+# the second is one person's access to their own Google account.
+gcp-oauth.keys.json
+*.keys.json
+tokens/
+token.json

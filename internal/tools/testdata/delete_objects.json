@@ -1,0 +1,9 @@
+{
+  "requests": [
+    {
+      "deleteObject": {
+        "objectId": "table1"
+      }
+    }
+  ]
+}

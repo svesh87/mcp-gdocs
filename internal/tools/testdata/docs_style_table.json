@@ -1,0 +1,110 @@
+{
+  "requests": [
+    {
+      "updateTableCellStyle": {
+        "tableRange": {
+          "tableCellLocation": {
+            "tableStartLocation": {
+              "index": 129
+            },
+            "rowIndex": 0,
+            "columnIndex": 0
+          },
+          "rowSpan": 1,
+          "columnSpan": 2
+        },
+        "tableCellStyle": {
+          "backgroundColor": {
+            "color": {
+              "rgbColor": {
+                "red": 0.9529411764705882,
+                "green": 0.9529411764705882,
+                "blue": 0.9529411764705882
+              }
+            }
+          },
+          "borderTop": {
+            "color": {
+              "color": {
+                "rgbColor": {
+                  "red": 0.7176470588235294,
+                  "green": 0.7176470588235294,
+                  "blue": 0.7176470588235294
+                }
+              }
+            },
+            "width": {
+              "magnitude": 0,
+              "unit": "PT"
+            },
+            "dashStyle": "DOT"
+          },
+          "paddingLeft": {
+            "magnitude": 2.8,
+            "unit": "PT"
+          },
+          "contentAlignment": "MIDDLE"
+        },
+        "fields": "backgroundColor,borderTop,contentAlignment,paddingLeft"
+      }
+    },
+    {
+      "updateTableColumnProperties": {
+        "tableStartLocation": {
+          "index": 129
+        },
+        "columnIndices": [
+          0
+        ],
+        "tableColumnProperties": {
+          "width": {
+            "magnitude": 233.5,
+            "unit": "PT"
+          },
+          "widthType": "FIXED_WIDTH"
+        },
+        "fields": "width,widthType"
+      }
+    },
+    {
+      "updateTableRowStyle": {
+        "tableStartLocation": {
+          "index": 129
+        },
+        "rowIndices": [
+          0
+        ],
+        "tableRowStyle": {
+          "minRowHeight": {
+            "magnitude": 116.2,
+            "unit": "PT"
+          }
+        },
+        "fields": "minRowHeight"
+      }
+    },
+    {
+      "mergeTableCells": {
+        "tableRange": {
+          "tableCellLocation": {
+            "tableStartLocation": {
+              "index": 129
+            },
+            "rowIndex": 0,
+            "columnIndex": 0
+          },
+          "rowSpan": 1,
+          "columnSpan": 2
+        }
+      }
+    },
+    {
+      "pinTableHeaderRows": {
+        "tableStartLocation": {
+          "index": 129
+        },
+        "pinnedHeaderRowsCount": 1
+      }
+    }
+  ]
+}

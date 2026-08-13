@@ -1,0 +1,43 @@
+{
+  "requests": [
+    {
+      "updateDimensionProperties": {
+        "range": {
+          "sheetId": 0,
+          "dimension": "ROWS",
+          "startIndex": 0,
+          "endIndex": 1
+        },
+        "properties": {
+          "pixelSize": 68
+        },
+        "fields": "pixelSize"
+      }
+    },
+    {
+      "updateDimensionProperties": {
+        "range": {
+          "sheetId": 0,
+          "dimension": "ROWS",
+          "startIndex": 1,
+          "endIndex": 20
+        },
+        "properties": {
+          "pixelSize": 50
+        },
+        "fields": "pixelSize"
+      }
+    },
+    {
+      "updateSheetProperties": {
+        "properties": {
+          "sheetId": 0,
+          "gridProperties": {
+            "columnCount": 31
+          }
+        },
+        "fields": "gridProperties.columnCount"
+      }
+    }
+  ]
+}

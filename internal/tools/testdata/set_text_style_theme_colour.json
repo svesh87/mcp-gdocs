@@ -1,0 +1,21 @@
+{
+  "requests": [
+    {
+      "updateTextStyle": {
+        "objectId": "body1",
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "italic": true,
+          "foregroundColor": {
+            "opaqueColor": {
+              "themeColor": "LIGHT1"
+            }
+          }
+        },
+        "fields": "italic,foregroundColor"
+      }
+    }
+  ]
+}

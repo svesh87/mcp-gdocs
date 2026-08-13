@@ -1,0 +1,103 @@
+*English · [Русский](AGENTS.ru.md)*
+
+# Rules for this repository
+
+mcp-gdocs is an MCP server for Google Slides, Sheets, Docs and Drive, in Go. The points
+below are the ones that are expensive to rediscover; the rest of the reasoning is in
+[README.md](README.md) and [docs/SETUP.md](docs/SETUP.md).
+
+## What this server will not do
+
+- **Deletion stops at the edge of the file.** Inside a presentation or a document, removal
+  is ordinary editing: a copied deck comes down to the slides that apply, a step that
+  landed wrong leaves a paragraph or a table behind, and without a way back the only
+  repair is a person in a browser. Outside one — nothing. No file, no folder, no drive,
+  ever, whatever an instruction says. `gdocs_slides_delete` and `gdocs_docs_delete` are
+  the whole list, and a test holds it: a new name that removes anything fails the build
+  until it is added there deliberately.
+- **No arbitrary `batchUpdate`.** A caller must not be able to hand this server its own
+  list of API requests. Assembled batches are exactly what puts text boxes at invented
+  coordinates and leaves a deck looking broken. Every tool builds its own requests.
+- **No service account, no domain-wide delegation.** The server acts as the person who
+  signed in, and nothing else. The reasoning is in `docs/SETUP.md`; it is not a default
+  to revisit casually.
+
+## Slides
+
+- **EMU stays EMU.** Positions and sizes go in and out in English Metric Units, the unit
+  Slides itself uses. Do not convert to points "for convenience": the rounding is what
+  turns into visibly shifted layout.
+- **Depth is a tab character.** A nested list is built by sending text with tabs and
+  asking Slides to make a list of it. Never place indents or bullet characters by hand.
+- **Styles are read, not invented.** A style applied to a title comes from a real run of
+  text on a real slide, together with the field mask that says which parts of it apply.
+- **Text is counted in UTF-16 code units.** `utf16Length` exists for that: for Russian a
+  byte count is twice too large, the range lands in the middle of nothing and the API
+  refuses the whole batch.
+
+## Golden files
+
+`internal/tools/testdata/*.json` hold the exact request bodies this server sends. They
+are the test suite's point: what a deck ends up looking like is decided by those bodies,
+not by which methods were called.
+
+`go test ./... -update` rewrites them. A rewrite belongs in a commit that says **what
+changes about the result in the document** — "the title's indent is now reset before the
+bullets are made, so a rebuilt slide no longer inherits the list indent". A golden diff
+with no such explanation is a defect, not a formatting change.
+
+## Gates
+
+```bash
+gofmt -l .
+go vet ./...
+go test ./... -coverprofile=coverage.out
+go tool cover -func=coverage.out | tail -1     # not below 80%
+docker build -t mcp-gdocs:dev .
+```
+
+Nothing is worked around: no weakened assertions, no deleted tests, no files excluded
+from coverage.
+
+There is no Go toolchain on the owner's machine. The gates run in a container:
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/src" -w /src \
+  -v <cache-outside-the-tree>:/cache \
+  -e HOME=/cache/home -e GOCACHE=/cache/build -e GOMODCACHE=/cache/mod \
+  golang:1.25-alpine go test ./...
+```
+
+The caches must live outside the working tree: a module cache under it gets scanned as
+packages and `go mod tidy` fails.
+
+## Secrets
+
+`gcp-oauth.keys.json` and the token directory are never committed and never reach an
+image. Both are in `.gitignore` and `.dockerignore`. Errors must not quote the contents
+of either file — an error message ends up in logs.
+
+The OAuth client may also arrive as `GOOGLE_OAUTH_CLIENT_ID` and
+`GOOGLE_OAUTH_CLIENT_SECRET`, which is how it comes out of a password store, and the
+environment outranks the file. Secrets stay out of flags, because a flag is visible in a
+process list. The token is the exception that stays a file: the server rewrites it on
+every refresh, and a secret store is not somewhere a process writes to on its own.
+
+## Documentation is bilingual
+
+Every document has an English original and a Russian copy: `README.md` ↔
+`docs/README.ru.md`, `docs/SETUP.md` ↔ `docs/SETUP.ru.md`, this file ↔ `AGENTS.ru.md`.
+Each starts with the language line — `*English · [Русский](…)*` — and English is the
+original: a change lands there first and the Russian copy is brought level in the same
+commit. A copy that drifted is worse than no copy, because it is read as current.
+
+Three things stay in one language on purpose. Code, comments and error messages are
+English, because they end up in agent transcripts and issues. So is everything under
+`skills/` — it is read by a model, not by a person. The sign-in
+page (`internal/auth/login_page.go`) is Russian, because it is read by the people who
+sign in rather than by anyone reading the repository.
+
+## Drafts
+
+Plans, audits and trial runs live in `tmp/`, which is not committed and is never
+referenced from anything that is.

@@ -1,0 +1,92 @@
+{
+  "requests": [
+    {
+      "addChart": {
+        "chart": {
+          "spec": {
+            "title": "Задачи по командам",
+            "subtitle": "за квартал",
+            "basicChart": {
+              "chartType": "COLUMN",
+              "legendPosition": "RIGHT_LEGEND",
+              "stackedType": "STACKED",
+              "headerCount": 1,
+              "domains": [
+                {
+                  "domain": {
+                    "sourceRange": {
+                      "sources": [
+                        {
+                          "sheetId": 77,
+                          "startRowIndex": 0,
+                          "endRowIndex": 20,
+                          "startColumnIndex": 0,
+                          "endColumnIndex": 1
+                        }
+                      ]
+                    }
+                  }
+                }
+              ],
+              "series": [
+                {
+                  "series": {
+                    "sourceRange": {
+                      "sources": [
+                        {
+                          "sheetId": 77,
+                          "startRowIndex": 0,
+                          "endRowIndex": 20,
+                          "startColumnIndex": 2,
+                          "endColumnIndex": 3
+                        }
+                      ]
+                    }
+                  },
+                  "targetAxis": "LEFT_AXIS"
+                },
+                {
+                  "series": {
+                    "sourceRange": {
+                      "sources": [
+                        {
+                          "sheetId": 77,
+                          "startRowIndex": 0,
+                          "endRowIndex": 20,
+                          "startColumnIndex": 3,
+                          "endColumnIndex": 4
+                        }
+                      ]
+                    }
+                  },
+                  "targetAxis": "LEFT_AXIS"
+                }
+              ],
+              "axis": [
+                {
+                  "position": "BOTTOM_AXIS",
+                  "title": "Команда"
+                },
+                {
+                  "position": "LEFT_AXIS",
+                  "title": "Задач"
+                }
+              ]
+            }
+          },
+          "position": {
+            "overlayPosition": {
+              "anchorCell": {
+                "sheetId": 77,
+                "rowIndex": 22,
+                "columnIndex": 0
+              },
+              "widthPixels": 600,
+              "heightPixels": 371
+            }
+          }
+        }
+      }
+    }
+  ]
+}

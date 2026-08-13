@@ -1,0 +1,19 @@
+{
+  "requests": [
+    {
+      "deleteText": {
+        "objectId": "notes1",
+        "textRange": {
+          "type": "ALL"
+        }
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "notes1",
+        "text": "Новый текст заметок",
+        "insertionIndex": 0
+      }
+    }
+  ]
+}

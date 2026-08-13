@@ -1,0 +1,22 @@
+{
+  "requests": [
+    {
+      "updateSlideProperties": {
+        "objectId": "slide1",
+        "slideProperties": {
+          "isSkipped": true
+        },
+        "fields": "isSkipped"
+      }
+    },
+    {
+      "updateSlideProperties": {
+        "objectId": "slide2",
+        "slideProperties": {
+          "isSkipped": true
+        },
+        "fields": "isSkipped"
+      }
+    }
+  ]
+}

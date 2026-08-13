@@ -1,0 +1,38 @@
+{
+  "requests": [
+    {
+      "updateTextStyle": {
+        "objectId": "layout_title",
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "bold": true,
+          "fontFamily": "Rubik",
+          "fontSize": {
+            "magnitude": 25,
+            "unit": "PT"
+          },
+          "foregroundColor": {
+            "opaqueColor": {
+              "themeColor": "ACCENT1"
+            }
+          }
+        },
+        "fields": "fontSize,fontFamily,bold,foregroundColor"
+      }
+    },
+    {
+      "updateParagraphStyle": {
+        "objectId": "layout_title",
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "lineSpacing": 90
+        },
+        "fields": "lineSpacing"
+      }
+    }
+  ]
+}

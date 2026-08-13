@@ -1,0 +1,12 @@
+{
+  "requests": [
+    {
+      "createSlide": {
+        "insertionIndex": 2,
+        "slideLayoutReference": {
+          "layoutId": "layout_body"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "requests": [
+    {
+      "addBanding": {
+        "bandedRange": {
+          "range": {
+            "sheetId": 77,
+            "startRowIndex": 0,
+            "endRowIndex": 20,
+            "startColumnIndex": 0,
+            "endColumnIndex": 5
+          },
+          "rowProperties": {
+            "headerColor": {
+              "red": 0.8509803921568627,
+              "green": 0.8509803921568627,
+              "blue": 0.8509803921568627
+            },
+            "firstBandColor": {
+              "red": 1,
+              "green": 1,
+              "blue": 1
+            },
+            "secondBandColor": {
+              "red": 0.9529411764705882,
+              "green": 0.9529411764705882,
+              "blue": 0.9529411764705882
+            }
+          }
+        }
+      }
+    }
+  ]
+}

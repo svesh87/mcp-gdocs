@@ -1,0 +1,17 @@
+{
+  "properties": {
+    "title": "Отчёт"
+  },
+  "sheets": [
+    {
+      "properties": {
+        "title": "Данные"
+      }
+    },
+    {
+      "properties": {
+        "title": "Сводка"
+      }
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "requests": [
+    {
+      "setBasicFilter": {
+        "filter": {
+          "range": {
+            "sheetId": 77,
+            "startRowIndex": 0,
+            "endRowIndex": 20,
+            "startColumnIndex": 0,
+            "endColumnIndex": 5
+          },
+          "sortSpecs": [
+            {
+              "dimensionIndex": 2,
+              "sortOrder": "DESCENDING"
+            }
+          ],
+          "filterSpecs": [
+            {
+              "columnIndex": 1,
+              "filterCriteria": {
+                "hiddenValues": [
+                  "Не начали"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

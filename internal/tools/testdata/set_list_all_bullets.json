@@ -1,0 +1,36 @@
+{
+  "requests": [
+    {
+      "deleteParagraphBullets": {
+        "objectId": "body1",
+        "textRange": {
+          "type": "ALL"
+        }
+      }
+    },
+    {
+      "deleteText": {
+        "objectId": "body1",
+        "textRange": {
+          "type": "ALL"
+        }
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "body1",
+        "text": "Восстановили графики в табло\n\tСаше спасибо за помощь\nПеределали процесс On Call\n\tЧто было\n\t\tДежурство было строго добровольным",
+        "insertionIndex": 0
+      }
+    },
+    {
+      "createParagraphBullets": {
+        "objectId": "body1",
+        "textRange": {
+          "type": "ALL"
+        },
+        "bulletPreset": "BULLET_DISC_CIRCLE_SQUARE"
+      }
+    }
+  ]
+}

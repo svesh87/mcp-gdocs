@@ -1,0 +1,25 @@
+{
+  "requests": [
+    {
+      "updateParagraphStyle": {
+        "objectId": "body1",
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "alignment": "START",
+          "lineSpacing": 115,
+          "spaceAbove": {
+            "magnitude": 6,
+            "unit": "PT"
+          },
+          "spaceBelow": {
+            "magnitude": 0,
+            "unit": "PT"
+          }
+        },
+        "fields": "alignment,lineSpacing,spaceAbove,spaceBelow"
+      }
+    }
+  ]
+}

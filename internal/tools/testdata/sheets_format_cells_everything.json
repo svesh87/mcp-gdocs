@@ -1,0 +1,39 @@
+{
+  "requests": [
+    {
+      "repeatCell": {
+        "range": {
+          "sheetId": 77,
+          "startRowIndex": 1,
+          "endRowIndex": 19,
+          "startColumnIndex": 0,
+          "endColumnIndex": 1
+        },
+        "cell": {
+          "userEnteredFormat": {
+            "numberFormat": {
+              "type": "PERCENT",
+              "pattern": "0%"
+            },
+            "horizontalAlignment": "LEFT",
+            "verticalAlignment": "MIDDLE",
+            "wrapStrategy": "WRAP",
+            "textFormat": {
+              "fontFamily": "Arial",
+              "bold": false,
+              "italic": true,
+              "strikethrough": true,
+              "underline": true,
+              "link": {
+                "uri": "https://example.invalid/board"
+              }
+            },
+            "hyperlinkDisplayType": "LINKED"
+          },
+          "note": "откуда взялось"
+        },
+        "fields": "userEnteredFormat.textFormat(bold,italic,underline,strikethrough,fontFamily,link),userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment,userEnteredFormat.wrapStrategy,userEnteredFormat.hyperlinkDisplayType,userEnteredFormat.numberFormat,note"
+      }
+    }
+  ]
+}

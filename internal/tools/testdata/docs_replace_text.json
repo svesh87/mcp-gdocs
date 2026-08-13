@@ -1,0 +1,13 @@
+{
+  "requests": [
+    {
+      "replaceAllText": {
+        "containsText": {
+          "text": "{{имя}}",
+          "matchCase": true
+        },
+        "replaceText": "Аня"
+      }
+    }
+  ]
+}

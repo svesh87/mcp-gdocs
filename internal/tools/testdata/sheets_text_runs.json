@@ -1,0 +1,43 @@
+{
+  "requests": [
+    {
+      "updateCells": {
+        "start": {
+          "sheetId": 77,
+          "rowIndex": 4,
+          "columnIndex": 2
+        },
+        "rows": [
+          {
+            "values": [
+              {
+                "textFormatRuns": [
+                  {
+                    "format": {
+                      "bold": true
+                    }
+                  },
+                  {
+                    "startIndex": 5,
+                    "format": {
+                      "bold": false,
+                      "foregroundColor": {
+                        "red": 0.4,
+                        "green": 0.4,
+                        "blue": 0.4
+                      }
+                    }
+                  }
+                ],
+                "userEnteredValue": {
+                  "stringValue": "Итог: сходится"
+                }
+              }
+            ]
+          }
+        ],
+        "fields": "userEnteredValue,textFormatRuns"
+      }
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "requests": [
+    {
+      "duplicateSheet": {
+        "sourceSheetId": 77,
+        "newSheetName": "Отделы (копия)",
+        "insertSheetIndex": 2
+      }
+    }
+  ]
+}

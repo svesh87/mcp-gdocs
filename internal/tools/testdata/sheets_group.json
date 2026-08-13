@@ -1,0 +1,14 @@
+{
+  "requests": [
+    {
+      "addDimensionGroup": {
+        "range": {
+          "sheetId": 77,
+          "dimension": "ROWS",
+          "startIndex": 2,
+          "endIndex": 9
+        }
+      }
+    }
+  ]
+}

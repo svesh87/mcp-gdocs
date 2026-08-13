@@ -1,0 +1,31 @@
+{
+  "requests": [
+    {
+      "updateBorders": {
+        "range": {
+          "sheetId": 77,
+          "startRowIndex": 0,
+          "endRowIndex": 5,
+          "startColumnIndex": 0,
+          "endColumnIndex": 3
+        },
+        "top": {
+          "style": "SOLID_THICK",
+          "color": {
+            "red": 0.7176470588235294,
+            "green": 0.7176470588235294,
+            "blue": 0.7176470588235294
+          }
+        },
+        "innerHorizontal": {
+          "style": "SOLID_THICK",
+          "color": {
+            "red": 0.7176470588235294,
+            "green": 0.7176470588235294,
+            "blue": 0.7176470588235294
+          }
+        }
+      }
+    }
+  ]
+}

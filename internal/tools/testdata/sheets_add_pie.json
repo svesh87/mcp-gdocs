@@ -1,0 +1,46 @@
+{
+  "requests": [
+    {
+      "addChart": {
+        "chart": {
+          "spec": {
+            "title": "Доли",
+            "pieChart": {
+              "domain": {
+                "sourceRange": {
+                  "sources": [
+                    {
+                      "sheetId": 77,
+                      "startRowIndex": 1,
+                      "endRowIndex": 6,
+                      "startColumnIndex": 0,
+                      "endColumnIndex": 1
+                    }
+                  ]
+                }
+              },
+              "series": {
+                "sourceRange": {
+                  "sources": [
+                    {
+                      "sheetId": 77,
+                      "startRowIndex": 1,
+                      "endRowIndex": 6,
+                      "startColumnIndex": 2,
+                      "endColumnIndex": 3
+                    }
+                  ]
+                }
+              },
+              "legendPosition": "LABELED_LEGEND",
+              "pieHole": 0.4
+            }
+          },
+          "position": {
+            "newSheet": true
+          }
+        }
+      }
+    }
+  ]
+}

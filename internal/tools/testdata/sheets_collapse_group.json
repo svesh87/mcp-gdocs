@@ -1,0 +1,19 @@
+{
+  "requests": [
+    {
+      "updateDimensionGroup": {
+        "dimensionGroup": {
+          "range": {
+            "sheetId": 77,
+            "dimension": "ROWS",
+            "startIndex": 2,
+            "endIndex": 9
+          },
+          "depth": 1,
+          "collapsed": true
+        },
+        "fields": "collapsed"
+      }
+    }
+  ]
+}

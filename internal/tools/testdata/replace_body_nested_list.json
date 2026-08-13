@@ -1,0 +1,60 @@
+{
+  "requests": [
+    {
+      "deleteParagraphBullets": {
+        "objectId": "body1",
+        "textRange": {
+          "type": "ALL"
+        }
+      }
+    },
+    {
+      "deleteText": {
+        "objectId": "body1",
+        "textRange": {
+          "type": "ALL"
+        }
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "body1",
+        "text": "Что сделали\nИнфраструктура\n\tПереехали на новый кластер\n\tСократили холодный старт вдвое\nПродукт\n\tВыкатили отчёты",
+        "insertionIndex": 0
+      }
+    },
+    {
+      "createParagraphBullets": {
+        "objectId": "body1",
+        "textRange": {
+          "type": "FIXED_RANGE",
+          "startIndex": 12,
+          "endIndex": 111
+        },
+        "bulletPreset": "BULLET_DISC_CIRCLE_SQUARE"
+      }
+    },
+    {
+      "updateParagraphStyle": {
+        "objectId": "body1",
+        "textRange": {
+          "type": "FIXED_RANGE",
+          "startIndex": 0,
+          "endIndex": 11
+        },
+        "style": {
+          "alignment": "START",
+          "indentStart": {
+            "magnitude": 0,
+            "unit": "PT"
+          },
+          "indentFirstLine": {
+            "magnitude": 0,
+            "unit": "PT"
+          }
+        },
+        "fields": "alignment,indentStart,indentFirstLine"
+      }
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "requests": [
+    {
+      "updateTextStyle": {
+        "objectId": "mixed2",
+        "textRange": {
+          "type": "FIXED_RANGE",
+          "startIndex": 0,
+          "endIndex": 20
+        },
+        "style": {
+          "bold": true,
+          "foregroundColor": {
+            "opaqueColor": {
+              "rgbColor": {
+                "red": 0.1,
+                "green": 0.5,
+                "blue": 0.2
+              }
+            }
+          }
+        },
+        "fields": "bold,foregroundColor"
+      }
+    }
+  ]
+}

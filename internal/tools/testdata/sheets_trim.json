@@ -1,0 +1,15 @@
+{
+  "requests": [
+    {
+      "trimWhitespace": {
+        "range": {
+          "sheetId": 77,
+          "startRowIndex": 1,
+          "endRowIndex": 20,
+          "startColumnIndex": 4,
+          "endColumnIndex": 5
+        }
+      }
+    }
+  ]
+}

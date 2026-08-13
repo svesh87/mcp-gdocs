@@ -1,0 +1,59 @@
+{
+  "requests": [
+    {
+      "updateParagraphStyle": {
+        "range": {
+          "startIndex": 14,
+          "endIndex": 30
+        },
+        "paragraphStyle": {
+          "namedStyleType": "NORMAL_TEXT",
+          "alignment": "CENTER",
+          "lineSpacing": 115,
+          "spaceAbove": {
+            "magnitude": 18,
+            "unit": "PT"
+          },
+          "borderTop": {
+            "color": {
+              "color": {
+                "rgbColor": {
+                  "red": 0.7176470588235294,
+                  "green": 0.7176470588235294,
+                  "blue": 0.7176470588235294
+                }
+              }
+            },
+            "width": {
+              "magnitude": 0,
+              "unit": "PT"
+            },
+            "padding": {
+              "magnitude": 1,
+              "unit": "PT"
+            },
+            "dashStyle": "DOT"
+          },
+          "indentStart": {
+            "magnitude": 36,
+            "unit": "PT"
+          },
+          "keepWithNext": true,
+          "shading": {
+            "backgroundColor": {
+              "color": {
+                "rgbColor": {
+                  "red": 0.9529411764705882,
+                  "green": 0.9529411764705882,
+                  "blue": 0.9529411764705882
+                }
+              }
+            }
+          },
+          "pageBreakBefore": false
+        },
+        "fields": "alignment,borderBottom,borderTop,indentStart,keepWithNext,lineSpacing,namedStyleType,pageBreakBefore,shading,spaceAbove"
+      }
+    }
+  ]
+}

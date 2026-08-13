@@ -1,0 +1,55 @@
+{
+  "requests": [
+    {
+      "updateDimensionProperties": {
+        "range": {
+          "sheetId": 7,
+          "dimension": "COLUMNS",
+          "startIndex": 0,
+          "endIndex": 1
+        },
+        "properties": {
+          "pixelSize": 220
+        },
+        "fields": "pixelSize"
+      }
+    },
+    {
+      "updateDimensionProperties": {
+        "range": {
+          "sheetId": 7,
+          "dimension": "COLUMNS",
+          "startIndex": 1,
+          "endIndex": 2
+        },
+        "properties": {
+          "pixelSize": 120
+        },
+        "fields": "pixelSize"
+      }
+    },
+    {
+      "updateSheetProperties": {
+        "properties": {
+          "sheetId": 7,
+          "gridProperties": {
+            "frozenRowCount": 1
+          }
+        },
+        "fields": "gridProperties.frozenRowCount"
+      }
+    },
+    {
+      "mergeCells": {
+        "range": {
+          "sheetId": 7,
+          "startRowIndex": 0,
+          "endRowIndex": 1,
+          "startColumnIndex": 0,
+          "endColumnIndex": 2
+        },
+        "mergeType": "MERGE_ALL"
+      }
+    }
+  ]
+}

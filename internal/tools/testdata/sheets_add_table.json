@@ -1,0 +1,71 @@
+{
+  "requests": [
+    {
+      "addTable": {
+        "table": {
+          "name": "Статусы",
+          "range": {
+            "sheetId": 77,
+            "startRowIndex": 0,
+            "endRowIndex": 20,
+            "startColumnIndex": 0,
+            "endColumnIndex": 3
+          },
+          "columnProperties": [
+            {
+              "columnIndex": 0,
+              "columnName": "Задача",
+              "columnType": "TEXT"
+            },
+            {
+              "columnIndex": 1,
+              "columnName": "Статус",
+              "columnType": "DROPDOWN",
+              "dataValidationRule": {
+                "condition": {
+                  "type": "ONE_OF_LIST",
+                  "values": [
+                    {
+                      "userEnteredValue": "Всё ок"
+                    },
+                    {
+                      "userEnteredValue": "Есть риск"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "columnIndex": 2,
+              "columnName": "Готово",
+              "columnType": "PERCENT"
+            }
+          ],
+          "rowsProperties": {
+            "headerColorStyle": {
+              "rgbColor": {
+                "red": 0.8509803921568627,
+                "green": 0.9176470588235294,
+                "blue": 0.8274509803921568
+              }
+            },
+            "firstBandColorStyle": {
+              "rgbColor": {
+                "red": 1,
+                "green": 1,
+                "blue": 1
+              }
+            },
+            "secondBandColorStyle": {
+              "rgbColor": {
+                "red": 0.9647058823529412,
+                "green": 0.9647058823529412,
+                "blue": 0.9647058823529412
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

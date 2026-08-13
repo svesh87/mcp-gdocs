@@ -1,0 +1,25 @@
+{
+  "requests": [
+    {
+      "updatePageProperties": {
+        "objectId": "slide1",
+        "pageProperties": {
+          "pageBackgroundFill": {
+            "propertyState": "RENDERED",
+            "solidFill": {
+              "color": {
+                "rgbColor": {
+                  "red": 0.1,
+                  "green": 0.2,
+                  "blue": 0.3
+                }
+              },
+              "alpha": 1
+            }
+          }
+        },
+        "fields": "pageBackgroundFill"
+      }
+    }
+  ]
+}

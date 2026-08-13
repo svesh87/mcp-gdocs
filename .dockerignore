@@ -1,0 +1,18 @@
+.git
+.github
+tmp
+skills
+docs
+*.md
+.gitignore
+.dockerignore
+Dockerfile
+coverage.out
+
+# Neither of these belongs in an image. The OAuth client identifies the application and is
+# shared out of band; the token is one person's access to their Google account. An image
+# carrying either would hand it to whoever pulls the image.
+gcp-oauth.keys.json
+*.keys.json
+tokens/
+token.json

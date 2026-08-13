@@ -1,0 +1,13 @@
+{
+  "requests": [
+    {
+      "updateSpreadsheetProperties": {
+        "properties": {
+          "locale": "ru_RU",
+          "timeZone": "Europe/Moscow"
+        },
+        "fields": "locale,timeZone"
+      }
+    }
+  ]
+}

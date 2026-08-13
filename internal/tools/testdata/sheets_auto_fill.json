@@ -1,0 +1,19 @@
+{
+  "requests": [
+    {
+      "autoFill": {
+        "sourceAndDestination": {
+          "source": {
+            "sheetId": 77,
+            "startRowIndex": 1,
+            "endRowIndex": 3,
+            "startColumnIndex": 0,
+            "endColumnIndex": 1
+          },
+          "dimension": "ROWS",
+          "fillLength": 10
+        }
+      }
+    }
+  ]
+}

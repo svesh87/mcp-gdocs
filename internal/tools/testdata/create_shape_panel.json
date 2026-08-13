@@ -1,0 +1,85 @@
+{
+  "requests": [
+    {
+      "createShape": {
+        "objectId": "textbox_test",
+        "shapeType": "ROUND_RECTANGLE",
+        "elementProperties": {
+          "pageObjectId": "slide1",
+          "size": {
+            "width": {
+              "magnitude": 4000000,
+              "unit": "EMU"
+            },
+            "height": {
+              "magnitude": 1000000,
+              "unit": "EMU"
+            }
+          },
+          "transform": {
+            "scaleX": 1,
+            "scaleY": 1,
+            "translateX": 400000,
+            "translateY": 200000,
+            "unit": "EMU"
+          }
+        }
+      }
+    },
+    {
+      "updateShapeProperties": {
+        "objectId": "textbox_test",
+        "shapeProperties": {
+          "shapeBackgroundFill": {
+            "propertyState": "RENDERED",
+            "solidFill": {
+              "color": {
+                "rgbColor": {
+                  "red": 0.9,
+                  "green": 0.9,
+                  "blue": 0.9
+                }
+              },
+              "alpha": 1
+            }
+          }
+        },
+        "fields": "shapeBackgroundFill"
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "textbox_test",
+        "text": "Итоги",
+        "insertionIndex": 0
+      }
+    },
+    {
+      "updateTextStyle": {
+        "objectId": "textbox_test",
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "fontSize": {
+            "magnitude": 18,
+            "unit": "PT"
+          }
+        },
+        "fields": "fontSize"
+      }
+    },
+    {
+      "updateParagraphStyle": {
+        "objectId": "textbox_test",
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "alignment": "CENTER"
+        },
+        "fields": "alignment"
+      }
+    }
+  ]
+}

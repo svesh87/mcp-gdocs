@@ -1,0 +1,18 @@
+{
+  "requests": [
+    {
+      "findReplace": {
+        "find": "Q1",
+        "replacement": "Q2",
+        "range": {
+          "sheetId": 77,
+          "startRowIndex": 1,
+          "endRowIndex": 20,
+          "startColumnIndex": 3,
+          "endColumnIndex": 4
+        },
+        "matchEntireCell": true
+      }
+    }
+  ]
+}

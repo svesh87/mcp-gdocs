@@ -1,0 +1,40 @@
+{
+  "requests": [
+    {
+      "updateTextStyle": {
+        "objectId": "body1",
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "bold": true,
+          "fontFamily": "Rubik",
+          "fontSize": {
+            "magnitude": 14,
+            "unit": "PT"
+          },
+          "foregroundColor": {
+            "opaqueColor": {
+              "rgbColor": {
+                "red": 0.8
+              }
+            }
+          }
+        },
+        "fields": "fontSize,fontFamily,bold,foregroundColor"
+      }
+    },
+    {
+      "updateParagraphStyle": {
+        "objectId": "body1",
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "alignment": "START"
+        },
+        "fields": "alignment"
+      }
+    }
+  ]
+}

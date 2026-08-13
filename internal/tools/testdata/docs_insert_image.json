@@ -1,0 +1,22 @@
+{
+  "requests": [
+    {
+      "insertInlineImage": {
+        "uri": "https://lh7-rt.example/pic",
+        "location": {
+          "index": 31
+        },
+        "objectSize": {
+          "height": {
+            "magnitude": 45.4,
+            "unit": "PT"
+          },
+          "width": {
+            "magnitude": 45.4,
+            "unit": "PT"
+          }
+        }
+      }
+    }
+  ]
+}

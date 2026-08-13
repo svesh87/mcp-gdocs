@@ -1,0 +1,18 @@
+{
+  "requests": [
+    {
+      "updatePageProperties": {
+        "objectId": "slide1",
+        "pageProperties": {
+          "pageBackgroundFill": {
+            "propertyState": "RENDERED",
+            "stretchedPictureFill": {
+              "contentUrl": "https://example.invalid/bg.png"
+            }
+          }
+        },
+        "fields": "pageBackgroundFill"
+      }
+    }
+  ]
+}

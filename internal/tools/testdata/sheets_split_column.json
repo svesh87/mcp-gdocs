@@ -1,0 +1,17 @@
+{
+  "requests": [
+    {
+      "textToColumns": {
+        "source": {
+          "sheetId": 77,
+          "startRowIndex": 1,
+          "endRowIndex": 20,
+          "startColumnIndex": 4,
+          "endColumnIndex": 5
+        },
+        "delimiterType": "CUSTOM",
+        "delimiter": "—"
+      }
+    }
+  ]
+}

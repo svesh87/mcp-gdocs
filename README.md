@@ -1,0 +1,311 @@
+*English · [Русский](docs/README.ru.md)*
+
+# mcp-gdocs
+
+An MCP server for Google Slides, Sheets, Docs and Drive that acts as one signed-in
+person and edits presentations the way the editor does.
+
+The presentations are the point. A general-purpose Google server edits a deck by moving
+text boxes to coordinates it invented, writing bullet characters into plain text and
+replacing a real table with a scattering of shapes. What comes out looks broken to
+everyone who opens it, and nobody can fix it without redoing the slide. The tools here
+work with the template instead of around it: native nested lists, styles read off the
+deck's own slides, real tables, and a thumbnail to check the result with.
+
+## Why the narrow slides tools work
+
+Each of these is a decision, not an implementation detail:
+
+- **Native lists, not hand-drawn ones.** `gdocs_slides_replace_body_nested_list` sends
+  the text with tab characters for depth and asks Slides to make a list of it. Google
+  then works out the indents, the markers and the spacing from the template. A server
+  that positions bullets itself gets them almost right, which is worse than wrong.
+- **Styles are copied, never invented.** `gdocs_slides_copy_title_style` reads the first
+  run of a real title and applies those fields. Nothing guesses what "the heading font"
+  is.
+- **Look before changing.** `gdocs_slides_inspect_text_structure` shows what is in a text
+  box — paragraphs, bullets, nesting — before anything is replaced.
+- **A table is a table.** `gdocs_slides_create_table_with_text` creates a real Slides
+  table with column widths, fonts and per-column alignment. Rows of text boxes look
+  similar until somebody edits one.
+- **Check with your eyes.** `gdocs_slides_export_thumbnail` renders the slide so an agent
+  can look at what it did rather than trust the batch it sent.
+- **No arbitrary batches.** There is no tool that forwards a caller's own requests to
+  `presentations.batchUpdate`. That tool is what produces crooked decks, so it does not
+  exist here.
+
+The approach comes from a working server a colleague wrote for exactly this problem;
+this is that behaviour in Go, with the rest of the Google editors around it.
+
+## No deletion, anywhere
+
+There is no tool that deletes a file, a slide, a tab or a row — not disabled, not behind
+a flag: no code that could. An agent that tidied up a shared drive is an incident nobody
+can undo, and the cheapest way not to have it is to have nothing that does it. A test
+enforces this against the registered tool names.
+
+Everything that changes anything at all needs `--allow-write`. Without it the server
+offers only the reading tools.
+
+## Tools
+
+Fifty-five of them: seventeen that read, thirty-eight that change something. A server
+started without `--allow-write` registers the reading ones and nothing else, and the three
+that touch the disk appear only when `--files-dir` names a directory they may use.
+
+They come in pairs on purpose: whatever a reading tool reports, a writing tool takes back
+in the same units. There is no tool that copies styling from one deck into another in one
+call — that answers "make this look like that", and the job is to build a deck that looks
+right, having read how a dozen others are built. Copying also hides the numbers: a caller
+that never learns the sample's headings are 25 pt in the theme's accent colour cannot
+decide to use 22 pt here, or to keep the size and change the colour.
+
+Reading, always offered:
+
+| Tool | What it does |
+|---|---|
+| `gdocs_slides_list` | slides of a deck with the objects on each: identifiers, kinds, placeholders, sizes |
+| `gdocs_slides_inspect_page` | one slide completely: background, notes, and every element with its box, turn, stacking, fill, outline and crop |
+| `gdocs_slides_read_theme` | the palette, the master's background, and every layout with the styles its placeholders impose |
+| `gdocs_slides_list_layouts` | the layouts the deck's own template offers |
+| `gdocs_slides_inspect_text_structure` | paragraphs of a text box: bullets, nesting, styles, spacing and indents |
+| `gdocs_slides_inspect_title_style` | what a line of text really looks like, merged across text, layout and master |
+| `gdocs_slides_read_table` | a table's cells, column widths, row heights and cell styling |
+| `gdocs_slides_export_thumbnail` | a rendered picture of one slide |
+| `gdocs_sheets_info` | a spreadsheet's tabs, their identifiers and sizes |
+| `gdocs_sheets_read` | cells of a range or a whole tab |
+| `gdocs_sheets_read_format` | a range cell by cell, with widths, heights, merges, links, notes and dropdowns |
+| `gdocs_sheets_read_dropdown_colors` | the colours a dropdown paints its options in, which no API answer carries |
+| `gdocs_docs_read` | a document as text, tables tab-separated |
+| `gdocs_docs_read_structure` | a document as it is built: paragraphs, runs, lists, tables, sections, headers, named styles, pictures |
+| `gdocs_drive_search` | files across Drive and shared drives |
+| `gdocs_drive_file_info` | one file's name, kind, owners and folders |
+| `gdocs_drive_export` | a file exported to another format |
+
+Writing, only with `--allow-write`.
+
+Slides, the content of a deck:
+
+| Tool | What it does |
+|---|---|
+| `gdocs_slides_copy_presentation` | start a deck from a template, keeping master, layouts and fonts |
+| `gdocs_slides_add_slide` | add a slide following one of the deck's own layouts |
+| `gdocs_slides_set_text` | replace a text box's text, styling left to the template |
+| `gdocs_slides_replace_body_nested_list` | rebuild a body slide as a native nested list |
+| `gdocs_slides_create_table_with_text` | a real table with widths, fonts, colours and alignment |
+| `gdocs_slides_update_table_cells` | new values in a table that already exists, keeping its widths and styling |
+| `gdocs_slides_style_table` | merge cells, fill them, align their content, set row heights |
+| `gdocs_slides_insert_image` | put a picture on a slide by address |
+| `gdocs_slides_create_shape` | a text box, or a panel, arrow or circle, with its text, fill and outline |
+| `gdocs_slides_create_line` | a line, an arrow or a connector |
+| `gdocs_slides_set_speaker_notes` | replace the notes behind a slide |
+| `gdocs_slides_reorder` | put the slides in a given order |
+| `gdocs_slides_delete` | remove a slide or an element of one, and nothing outside the deck |
+
+Slides, how it looks:
+
+| Tool | What it does |
+|---|---|
+| `gdocs_slides_place_element` | move, resize, turn or mirror anything, by edge, by anchor or by a sample's own place |
+| `gdocs_slides_order_elements` | say what covers what |
+| `gdocs_slides_group` | join elements into a group, or take groups apart |
+| `gdocs_slides_set_page_background` | a colour, a picture, or back to the layout's |
+| `gdocs_slides_style_shape` | fill, outline and content alignment of a shape |
+| `gdocs_slides_style_image` | crop, transparency, brightness, contrast and border of a picture |
+| `gdocs_slides_set_text_style` | size, font, weight, italics, colour — literal or by theme name |
+| `gdocs_slides_set_paragraph_style` | alignment, line spacing, the space around paragraphs, indents |
+| `gdocs_slides_copy_title_style` | copy a real title's style onto another, across decks if needed |
+| `gdocs_slides_reset_text_style` | give text back to its layout |
+| `gdocs_slides_link_text` | turn a piece of text into a link |
+| `gdocs_slides_style_layout` | write a style into a layout or the master, so every slide following it inherits |
+| `gdocs_slides_set_theme_colors` | replace the deck's palette, all twelve colours at once |
+
+Sheets, Docs and Drive:
+
+| Tool | What it does |
+|---|---|
+| `gdocs_sheets_write` | write a rectangle of cells |
+| `gdocs_sheets_append` | add rows after the last one, inserting rather than overwriting |
+| `gdocs_sheets_create` | create a spreadsheet with its locale and the size of each tab |
+| `gdocs_sheets_add_tab` | add a tab, with its size |
+| `gdocs_sheets_duplicate_tab` | copy a tab inside the same workbook |
+| `gdocs_sheets_update_properties` | title, locale and time zone of an existing workbook |
+| `gdocs_sheets_format_cells` | font, weight, colours, both alignments, wrapping, number format, rotation, padding, link, note |
+| `gdocs_sheets_set_text_runs` | style parts of one cell's text differently |
+| `gdocs_sheets_set_borders` | edges of a rectangle and the lines inside it |
+| `gdocs_sheets_set_validation` | put a dropdown on a rectangle of cells |
+| `gdocs_sheets_set_conditional_format` | colour cells by what is in them, by condition or gradient |
+| `gdocs_sheets_set_banding` | alternating stripes that follow rows added to the range |
+| `gdocs_sheets_set_filter` | the tab's filter: what each column hides, how it sorts |
+| `gdocs_sheets_protect_range` | keep a range from being changed |
+| `gdocs_sheets_add_named_range` | give a range a name formulas can use |
+| `gdocs_sheets_set_layout` | widths, heights, frozen rows, merges, hiding, tab colour, a bigger grid |
+| `gdocs_sheets_insert_dimensions` | add rows or columns in the middle or at the end |
+| `gdocs_sheets_move_dimensions` | move rows or columns elsewhere on the tab |
+| `gdocs_sheets_group_dimensions` | fold a run of rows or columns into a group |
+| `gdocs_sheets_collapse_group` | fold a group up or open it |
+| `gdocs_sheets_sort_range` | sort a rectangle by its columns |
+| `gdocs_sheets_find_replace` | replace text across a range, a tab or the workbook |
+| `gdocs_sheets_trim_whitespace` | take the spaces off both ends of every cell |
+| `gdocs_sheets_split_column` | split one column into several by a separator |
+| `gdocs_sheets_auto_fill` | carry a series on the way dragging a corner does |
+| `gdocs_sheets_add_chart` | draw a column, bar, line, area, scatter or pie chart from a range |
+| `gdocs_sheets_add_table` | turn a rectangle into a table with typed columns |
+| `gdocs_docs_create` | create a document |
+| `gdocs_docs_append` | add text at the end |
+| `gdocs_docs_insert_text` | insert text at a position, in the body or in a header |
+| `gdocs_docs_replace_text` | replace every occurrence of a string |
+| `gdocs_docs_style_text` | weight, slant, size, font, colours and links over a range |
+| `gdocs_docs_style_paragraph` | named style, alignment, indents, spacing, borders, shading |
+| `gdocs_docs_style_named` | what NORMAL_TEXT, TITLE or a heading means in this document |
+| `gdocs_docs_style_document` | paper size, margins, background, header and footer margins |
+| `gdocs_docs_make_bullets` | turn paragraphs into a list, depth by tab characters |
+| `gdocs_docs_insert_table` | put a table in |
+| `gdocs_docs_style_table` | cell fills, borders, padding, column widths, row heights, merges, pinned rows |
+| `gdocs_docs_insert_section_break` | start a section, which is what carries its own header |
+| `gdocs_docs_style_section` | margins and columns of one section |
+| `gdocs_docs_add_header_footer` | make a header or a footer and hand back its segment |
+| `gdocs_docs_insert_image` | a picture from an address Google can fetch |
+| `gdocs_docs_insert_page_break` | start a new page |
+| `gdocs_docs_insert_footnote` | a footnote and the segment to write it in |
+| `gdocs_docs_delete` | remove something inside a document: a range, a table row or column, a header, a footer, a floating object, the bullets of a list |
+| `gdocs_drive_copy` | copy a file |
+
+## Access
+
+The server acts as one person: whoever completed the sign-in. There is no service
+account and no domain-wide delegation, deliberately — a service account key with
+delegation can impersonate any employee without their knowledge, and an image carrying
+one would be a company-wide compromise waiting for a leak. See
+[docs/SETUP.md](docs/SETUP.md) for the Google Workspace setup, field by field, and the
+reasoning behind it.
+
+Two secrets, kept apart:
+
+- The **OAuth client** identifies the application. Either the file Google Cloud Console
+  downloads, named by `--credentials`, or its two halves as `GOOGLE_OAUTH_CLIENT_ID` and
+  `GOOGLE_OAUTH_CLIENT_SECRET` — which is what a password store hands over, and then
+  nothing about the application is on disk at all. The environment wins when both are
+  given, so a file left over from an earlier setup cannot quietly outrank it.
+- The **token** is what one person's consent turned into. It is created by their own
+  sign-in and stays a file, 0600, in the directory named by `--token-dir`. A file rather
+  than a variable because the server rewrites it whenever the access token is refreshed,
+  and a secret store is not somewhere a process writes to on its own.
+
+Neither is ever committed or built into an image; `.gitignore` and `.dockerignore` carry
+both.
+
+## Signing in
+
+On a machine with a browser:
+
+```bash
+mcp-gdocs login --credentials ./gcp-oauth.keys.json --token-dir ./tokens
+```
+
+It prints an address, waits on a loopback port for the browser to come back, and writes
+the token.
+
+In a container there is no browser, so the sign-in happens through a page the server
+serves itself. Publish its port on loopback and open:
+
+```
+http://127.0.0.1:8819/login?key=<the server's MCP_AUTH_TOKEN>
+```
+
+The page says whether anybody is signed in and what will be asked for, and one button
+sends the browser to Google's consent screen. Google returns it to `127.0.0.1` on the
+same port — an address a Google client of type Desktop accepts without anything being
+registered in the console — and the token is written on the way back.
+
+The key is in the address because a browser sends no `Authorization` header of its own,
+so the page is served `no-store` and `no-referrer`, and the trip to Google is a form
+submission rather than a link: a forwarded `/login` address shows a page, not a consent
+screen.
+
+For a server on another machine, tunnel the port rather than exposing it — Google only
+redirects to loopback: `ssh -L 8819:127.0.0.1:8819 <host>`.
+
+## Running
+
+```bash
+mcp-gdocs --credentials /config/gcp-oauth.keys.json --token-dir /config/tokens --allow-write
+```
+
+| Flag | What it does |
+|---|---|
+| `--transport` | `stdio` (default) or `streamable-http` |
+| `--address` | address to listen on with `streamable-http`, default `127.0.0.1:8819` |
+| `--credentials` | path to the OAuth client file. Required unless the client comes from the environment |
+| `--token-dir` | directory the token lives in. Required |
+| `--scopes` | scopes to ask for, comma separated. Empty means `drive`, `spreadsheets`, `presentations`, `documents` |
+| `--allow-write` | register the tools that change documents. Off by default |
+| `--version` | print the version and exit |
+
+Three environment variables, because a secret in a flag shows up in a process list:
+
+| Variable | What it is |
+|---|---|
+| `MCP_AUTH_TOKEN` | bearer token the HTTP transport demands. The server refuses to start on `streamable-http` without it: whatever reaches that port acts as the person who signed in |
+| `GOOGLE_OAUTH_CLIENT_ID` | the OAuth client, instead of `--credentials`. Both halves or neither |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | the other half |
+
+The full `drive` scope rather than `drive.file` is deliberate: a deck is made by copying
+a template, and `drive.file` only ever sees files the application created itself, so it
+cannot open the template at all.
+
+In a container, with the client injected and only the token mounted:
+
+```bash
+docker run --rm -i --user "$(id -u):$(id -g)" \
+  -e GOOGLE_OAUTH_CLIENT_ID -e GOOGLE_OAUTH_CLIENT_SECRET \
+  -v "$HOME/.local/share/mcp-gdocs:/tokens" \
+  ghcr.io/svesh87/mcp-gdocs:latest \
+  --token-dir /tokens --allow-write
+```
+
+The image is `FROM scratch` and runs as 65532, so whoever mounts a token directory
+overrides the user with their own identifier — otherwise the directory is not writable
+and the server exits saying so.
+
+## The skills
+
+One per editor, because a deck and a workbook go wrong in different ways:
+
+- [`skills/gdocs-slides/`](skills/gdocs-slides/SKILL.md) — building a deck: the order of
+  calls, what to read before changing anything, why blocks are never moved by hand.
+- [`skills/gdocs-sheets/`](skills/gdocs-sheets/SKILL.md) — building a workbook: why
+  formatting is a decomposition into rectangles rather than a wash, and why the size and
+  the locale are decided at creation.
+
+Each has the same two references beside it, because the way of working and the facts about
+the API age differently: `references/controls.md` lists every knob by what it changes —
+what reads it, what writes it, in which units — and `references/pitfalls.md` lists the
+traps, each with what it does to the document and what to do instead, ending with the
+handful of things the API will not report at all.
+
+## Development
+
+```bash
+gofmt -l .
+go vet ./...
+go test ./... -coverprofile=coverage.out
+go tool cover -func=coverage.out | tail -1     # not below 80%
+docker build -t mcp-gdocs:dev .
+```
+
+The tests hold **golden request bodies**: the exact JSON this server sends to Slides,
+Sheets and Docs, in `internal/tools/testdata/`. They are the point of the test suite,
+because what a deck ends up looking like is decided by those bodies and not by which
+methods were called. `go test ./... -update` rewrites them, and a rewrite belongs in a
+commit that says what changed about the result.
+
+## Credit
+
+The approach to editing presentations — native nested lists, styles copied from the
+template, real tables, thumbnails for verification, and no arbitrary `batchUpdate` — is
+taken from a colleague's Node server built for the same problem.
+
+Request shapes and endpoint use were checked against
+[`piotr-agier/google-drive-mcp`](https://github.com/piotr-agier/google-drive-mcp), MIT
+licensed. No code was copied; this server is Go and its own.

@@ -1,0 +1,14 @@
+{
+  "requests": [
+    {
+      "updateTextStyle": {
+        "objectId": "body1",
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {},
+        "fields": "fontSize,foregroundColor"
+      }
+    }
+  ]
+}

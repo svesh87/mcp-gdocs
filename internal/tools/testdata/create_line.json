@@ -1,0 +1,55 @@
+{
+  "requests": [
+    {
+      "createLine": {
+        "objectId": "line_test",
+        "elementProperties": {
+          "pageObjectId": "slide1",
+          "size": {
+            "width": {
+              "magnitude": 3000000,
+              "unit": "EMU"
+            },
+            "height": {
+              "magnitude": 0,
+              "unit": "EMU"
+            }
+          },
+          "transform": {
+            "scaleX": 1,
+            "scaleY": 1,
+            "translateX": 1000000,
+            "translateY": 2000000,
+            "unit": "EMU"
+          }
+        },
+        "category": "STRAIGHT"
+      }
+    },
+    {
+      "updateLineProperties": {
+        "objectId": "line_test",
+        "lineProperties": {
+          "lineFill": {
+            "solidFill": {
+              "color": {
+                "rgbColor": {
+                  "red": 0.2,
+                  "green": 0.2,
+                  "blue": 0.2
+                }
+              },
+              "alpha": 1
+            }
+          },
+          "weight": {
+            "magnitude": 25400,
+            "unit": "EMU"
+          },
+          "endArrow": "FILL_ARROW"
+        },
+        "fields": "lineFill,weight,endArrow"
+      }
+    }
+  ]
+}

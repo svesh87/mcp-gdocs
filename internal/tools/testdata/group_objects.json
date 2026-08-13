@@ -1,0 +1,20 @@
+{
+  "requests": [
+    {
+      "groupObjects": {
+        "childrenObjectIds": [
+          "panel1",
+          "photo"
+        ],
+        "groupObjectId": "group_test"
+      }
+    },
+    {
+      "ungroupObjects": {
+        "objectIds": [
+          "group1"
+        ]
+      }
+    }
+  ]
+}

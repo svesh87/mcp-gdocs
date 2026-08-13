@@ -1,0 +1,15 @@
+{
+  "requests": [
+    {
+      "updatePageProperties": {
+        "objectId": "slide1",
+        "pageProperties": {
+          "pageBackgroundFill": {
+            "propertyState": "INHERIT"
+          }
+        },
+        "fields": "pageBackgroundFill"
+      }
+    }
+  ]
+}

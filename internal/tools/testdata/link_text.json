@@ -1,0 +1,20 @@
+{
+  "requests": [
+    {
+      "updateTextStyle": {
+        "objectId": "body1",
+        "textRange": {
+          "type": "FIXED_RANGE",
+          "startIndex": 27,
+          "endIndex": 34
+        },
+        "style": {
+          "link": {
+            "url": "https://example.invalid/cluster"
+          }
+        },
+        "fields": "link"
+      }
+    }
+  ]
+}

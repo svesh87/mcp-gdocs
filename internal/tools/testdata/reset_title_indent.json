@@ -1,0 +1,26 @@
+{
+  "requests": [
+    {
+      "updateParagraphStyle": {
+        "objectId": "title1",
+        "textRange": {
+          "type": "FIXED_RANGE",
+          "startIndex": 0,
+          "endIndex": 14
+        },
+        "style": {
+          "alignment": "START",
+          "indentStart": {
+            "magnitude": 0,
+            "unit": "EMU"
+          },
+          "indentFirstLine": {
+            "magnitude": 0,
+            "unit": "EMU"
+          }
+        },
+        "fields": "alignment,indentStart,indentFirstLine"
+      }
+    }
+  ]
+}

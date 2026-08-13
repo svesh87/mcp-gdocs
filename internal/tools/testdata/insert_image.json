@@ -1,0 +1,30 @@
+{
+  "requests": [
+    {
+      "createImage": {
+        "objectId": "image_test",
+        "url": "https://example.invalid/chart.png",
+        "elementProperties": {
+          "pageObjectId": "slide1",
+          "size": {
+            "width": {
+              "magnitude": 2000000,
+              "unit": "EMU"
+            },
+            "height": {
+              "magnitude": 1500000,
+              "unit": "EMU"
+            }
+          },
+          "transform": {
+            "scaleX": 1,
+            "scaleY": 1,
+            "translateX": 4000000,
+            "translateY": 1000000,
+            "unit": "EMU"
+          }
+        }
+      }
+    }
+  ]
+}

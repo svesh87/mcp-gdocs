@@ -1,0 +1,15 @@
+{
+  "requests": [
+    {
+      "deleteTableRow": {
+        "tableCellLocation": {
+          "tableStartLocation": {
+            "index": 129
+          },
+          "rowIndex": 2,
+          "columnIndex": 0
+        }
+      }
+    }
+  ]
+}

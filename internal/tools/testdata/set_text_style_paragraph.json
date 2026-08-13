@@ -1,0 +1,18 @@
+{
+  "requests": [
+    {
+      "updateTextStyle": {
+        "objectId": "body1",
+        "textRange": {
+          "type": "FIXED_RANGE",
+          "startIndex": 27,
+          "endIndex": 35
+        },
+        "style": {
+          "italic": true
+        },
+        "fields": "italic"
+      }
+    }
+  ]
+}

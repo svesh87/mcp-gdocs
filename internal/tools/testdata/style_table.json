@@ -1,0 +1,67 @@
+{
+  "requests": [
+    {
+      "mergeTableCells": {
+        "objectId": "table1",
+        "tableRange": {
+          "location": {
+            "rowIndex": 0,
+            "columnIndex": 0
+          },
+          "rowSpan": 1,
+          "columnSpan": 2
+        }
+      }
+    },
+    {
+      "updateTableCellProperties": {
+        "objectId": "table1",
+        "tableRange": {
+          "location": {
+            "rowIndex": 0,
+            "columnIndex": 0
+          },
+          "rowSpan": 1,
+          "columnSpan": 2
+        },
+        "tableCellProperties": {
+          "tableCellBackgroundFill": {
+            "solidFill": {
+              "color": {
+                "rgbColor": {
+                  "red": 0.8
+                }
+              },
+              "alpha": 1
+            }
+          }
+        },
+        "fields": "tableCellBackgroundFill.solidFill.color"
+      }
+    },
+    {
+      "updateTableCellProperties": {
+        "objectId": "table1",
+        "tableCellProperties": {
+          "contentAlignment": "MIDDLE"
+        },
+        "fields": "contentAlignment"
+      }
+    },
+    {
+      "updateTableRowProperties": {
+        "objectId": "table1",
+        "rowIndices": [
+          0
+        ],
+        "tableRowProperties": {
+          "minRowHeight": {
+            "magnitude": 600000,
+            "unit": "EMU"
+          }
+        },
+        "fields": "minRowHeight"
+      }
+    }
+  ]
+}

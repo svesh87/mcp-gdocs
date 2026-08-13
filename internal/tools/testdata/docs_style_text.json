@@ -1,0 +1,37 @@
+{
+  "requests": [
+    {
+      "updateTextStyle": {
+        "range": {
+          "startIndex": 1,
+          "endIndex": 14
+        },
+        "textStyle": {
+          "bold": true,
+          "fontSize": {
+            "magnitude": 26,
+            "unit": "PT"
+          },
+          "weightedFontFamily": {
+            "fontFamily": "Roboto",
+            "weight": 700
+          },
+          "foregroundColor": {
+            "color": {
+              "rgbColor": {
+                "red": 1,
+                "green": 1,
+                "blue": 1
+              }
+            }
+          },
+          "backgroundColor": {},
+          "link": {
+            "url": "https://example.org"
+          }
+        },
+        "fields": "backgroundColor,bold,fontSize,foregroundColor,link,weightedFontFamily"
+      }
+    }
+  ]
+}

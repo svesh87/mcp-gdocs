@@ -1,0 +1,15 @@
+{
+  "requests": [
+    {
+      "moveDimension": {
+        "source": {
+          "sheetId": 77,
+          "dimension": "COLUMNS",
+          "startIndex": 4,
+          "endIndex": 5
+        },
+        "destinationIndex": 2
+      }
+    }
+  ]
+}

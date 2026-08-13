@@ -1,0 +1,25 @@
+{
+  "requests": [
+    {
+      "duplicateObject": {
+        "objectId": "panel",
+        "objectIds": {
+          "panel": "panel_a"
+        }
+      }
+    },
+    {
+      "duplicateObject": {
+        "objectId": "panel",
+        "objectIds": {
+          "panel": "panel_b"
+        }
+      }
+    },
+    {
+      "duplicateObject": {
+        "objectId": "panel"
+      }
+    }
+  ]
+}

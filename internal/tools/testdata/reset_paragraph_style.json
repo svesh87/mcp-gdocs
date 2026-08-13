@@ -1,0 +1,14 @@
+{
+  "requests": [
+    {
+      "updateParagraphStyle": {
+        "objectId": "body1",
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {},
+        "fields": "alignment,lineSpacing"
+      }
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "requests": [
+    {
+      "addSheet": {
+        "properties": {
+          "title": "Новый",
+          "gridProperties": {
+            "rowCount": 994,
+            "columnCount": 29,
+            "frozenRowCount": 1
+          }
+        }
+      }
+    }
+  ]
+}

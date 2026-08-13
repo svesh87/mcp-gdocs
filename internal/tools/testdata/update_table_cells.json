@@ -1,0 +1,57 @@
+{
+  "requests": [
+    {
+      "updateTableColumnProperties": {
+        "objectId": "table1",
+        "columnIndices": [
+          0
+        ],
+        "tableColumnProperties": {
+          "columnWidth": {
+            "magnitude": 2500000,
+            "unit": "EMU"
+          }
+        },
+        "fields": "columnWidth"
+      }
+    },
+    {
+      "updateTableColumnProperties": {
+        "objectId": "table1",
+        "columnIndices": [
+          1
+        ],
+        "tableColumnProperties": {
+          "columnWidth": {
+            "magnitude": 1000000,
+            "unit": "EMU"
+          }
+        },
+        "fields": "columnWidth"
+      }
+    },
+    {
+      "deleteText": {
+        "objectId": "table1",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 1
+        },
+        "textRange": {
+          "type": "ALL"
+        }
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "table1",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 1
+        },
+        "text": "9 мин",
+        "insertionIndex": 0
+      }
+    }
+  ]
+}

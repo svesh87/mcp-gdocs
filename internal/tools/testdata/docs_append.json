@@ -1,0 +1,10 @@
+{
+  "requests": [
+    {
+      "insertText": {
+        "endOfSegmentLocation": {},
+        "text": "Ещё абзац\n"
+      }
+    }
+  ]
+}

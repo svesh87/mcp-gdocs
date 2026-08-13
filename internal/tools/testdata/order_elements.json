@@ -1,0 +1,13 @@
+{
+  "requests": [
+    {
+      "updatePageElementsZOrder": {
+        "pageElementObjectIds": [
+          "photo",
+          "panel1"
+        ],
+        "operation": "SEND_TO_BACK"
+      }
+    }
+  ]
+}

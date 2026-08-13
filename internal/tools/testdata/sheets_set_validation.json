@@ -1,0 +1,33 @@
+{
+  "requests": [
+    {
+      "setDataValidation": {
+        "range": {
+          "sheetId": 77,
+          "startRowIndex": 1,
+          "endRowIndex": 19,
+          "startColumnIndex": 10,
+          "endColumnIndex": 11
+        },
+        "rule": {
+          "condition": {
+            "type": "ONE_OF_LIST",
+            "values": [
+              {
+                "userEnteredValue": "Всё ок"
+              },
+              {
+                "userEnteredValue": "Есть риск"
+              },
+              {
+                "userEnteredValue": "Пауза"
+              }
+            ]
+          },
+          "strict": true,
+          "showCustomUi": true
+        }
+      }
+    }
+  ]
+}

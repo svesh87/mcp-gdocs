@@ -1,0 +1,22 @@
+{
+  "requests": [
+    {
+      "updateNamedStyle": {
+        "namedStyle": {
+          "namedStyleType": "NORMAL_TEXT",
+          "textStyle": {
+            "fontSize": {
+              "magnitude": 12,
+              "unit": "PT"
+            },
+            "weightedFontFamily": {
+              "fontFamily": "Roboto",
+              "weight": 400
+            }
+          }
+        },
+        "fields": "namedStyleType,textStyle.fontSize,textStyle.weightedFontFamily"
+      }
+    }
+  ]
+}

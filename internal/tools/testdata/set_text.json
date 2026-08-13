@@ -1,0 +1,27 @@
+{
+  "requests": [
+    {
+      "deleteParagraphBullets": {
+        "objectId": "title1",
+        "textRange": {
+          "type": "ALL"
+        }
+      }
+    },
+    {
+      "deleteText": {
+        "objectId": "title1",
+        "textRange": {
+          "type": "ALL"
+        }
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "title1",
+        "text": "Итоги квартала",
+        "insertionIndex": 0
+      }
+    }
+  ]
+}

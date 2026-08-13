@@ -1,0 +1,18 @@
+{
+  "requests": [
+    {
+      "addNamedRange": {
+        "namedRange": {
+          "name": "Кварталы",
+          "range": {
+            "sheetId": 77,
+            "startRowIndex": 1,
+            "endRowIndex": 6,
+            "startColumnIndex": 3,
+            "endColumnIndex": 4
+          }
+        }
+      }
+    }
+  ]
+}

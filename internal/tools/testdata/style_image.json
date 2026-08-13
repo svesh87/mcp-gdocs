@@ -1,0 +1,18 @@
+{
+  "requests": [
+    {
+      "updateImageProperties": {
+        "objectId": "photo",
+        "imageProperties": {
+          "cropProperties": {
+            "leftOffset": 0.1,
+            "rightOffset": 0.1,
+            "topOffset": 0.2
+          },
+          "transparency": 0.25
+        },
+        "fields": "cropProperties,transparency"
+      }
+    }
+  ]
+}

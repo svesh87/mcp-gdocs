@@ -1,0 +1,39 @@
+{
+  "requests": [
+    {
+      "addConditionalFormatRule": {
+        "rule": {
+          "ranges": [
+            {
+              "sheetId": 77,
+              "startRowIndex": 1,
+              "endRowIndex": 100,
+              "startColumnIndex": 10,
+              "endColumnIndex": 11
+            }
+          ],
+          "booleanRule": {
+            "condition": {
+              "type": "TEXT_EQ",
+              "values": [
+                {
+                  "userEnteredValue": "Застряли"
+                }
+              ]
+            },
+            "format": {
+              "backgroundColor": {
+                "red": 0.9568627450980393,
+                "green": 0.8,
+                "blue": 0.8
+              },
+              "textFormat": {
+                "bold": true
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

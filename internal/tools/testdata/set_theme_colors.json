@@ -1,0 +1,105 @@
+{
+  "requests": [
+    {
+      "updatePageProperties": {
+        "objectId": "master1",
+        "pageProperties": {
+          "colorScheme": {
+            "colors": [
+              {
+                "type": "DARK1",
+                "color": {}
+              },
+              {
+                "type": "LIGHT1",
+                "color": {
+                  "red": 1,
+                  "green": 1,
+                  "blue": 1
+                }
+              },
+              {
+                "type": "DARK2",
+                "color": {
+                  "red": 0.2627450980392157,
+                  "green": 0.2627450980392157,
+                  "blue": 0.2627450980392157
+                }
+              },
+              {
+                "type": "LIGHT2",
+                "color": {
+                  "red": 0.9372549019607843,
+                  "green": 0.9372549019607843,
+                  "blue": 0.9372549019607843
+                }
+              },
+              {
+                "type": "ACCENT1",
+                "color": {
+                  "red": 0.8
+                }
+              },
+              {
+                "type": "ACCENT2",
+                "color": {
+                  "red": 0.10196078431372549,
+                  "green": 0.45098039215686275,
+                  "blue": 0.9098039215686274
+                }
+              },
+              {
+                "type": "ACCENT3",
+                "color": {
+                  "red": 0.09411764705882353,
+                  "green": 0.5019607843137255,
+                  "blue": 0.2196078431372549
+                }
+              },
+              {
+                "type": "ACCENT4",
+                "color": {
+                  "red": 0.8901960784313725,
+                  "green": 0.4549019607843137
+                }
+              },
+              {
+                "type": "ACCENT5",
+                "color": {
+                  "red": 0.5764705882352941,
+                  "green": 0.20392156862745098,
+                  "blue": 0.9019607843137255
+                }
+              },
+              {
+                "type": "ACCENT6",
+                "color": {
+                  "red": 0.07058823529411765,
+                  "green": 0.7098039215686275,
+                  "blue": 0.796078431372549
+                }
+              },
+              {
+                "type": "HYPERLINK",
+                "color": {
+                  "red": 0.06666666666666667,
+                  "green": 0.3333333333333333,
+                  "blue": 0.8
+                }
+              },
+              {
+                "type": "FOLLOWED_HYPERLINK",
+                "color": {
+                  "red": 0.3333333333333333,
+                  "green": 0.10196078431372549,
+                  "blue": 0.5450980392156862
+                }
+              }
+            ]
+          }
+        },
+        "fields": "colorScheme"
+      }
+    }
+  ]
+}

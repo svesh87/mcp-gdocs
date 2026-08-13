@@ -1,0 +1,21 @@
+{
+  "requests": [
+    {
+      "updateTextStyle": {
+        "objectId": "body1",
+        "textRange": {
+          "type": "FIXED_RANGE",
+          "startIndex": 12,
+          "endIndex": 26
+        },
+        "style": {
+          "fontSize": {
+            "magnitude": 11,
+            "unit": "PT"
+          }
+        },
+        "fields": "fontSize"
+      }
+    }
+  ]
+}

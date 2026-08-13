@@ -1,0 +1,42 @@
+{
+  "requests": [
+    {
+      "updateShapeProperties": {
+        "objectId": "panel1",
+        "shapeProperties": {
+          "shapeBackgroundFill": {
+            "propertyState": "RENDERED",
+            "solidFill": {
+              "color": {
+                "rgbColor": {
+                  "red": 0.85,
+                  "green": 0.1,
+                  "blue": 0.1
+                }
+              },
+              "alpha": 0.9
+            }
+          },
+          "outline": {
+            "propertyState": "RENDERED",
+            "outlineFill": {
+              "solidFill": {
+                "color": {
+                  "rgbColor": {}
+                },
+                "alpha": 1
+              }
+            },
+            "weight": {
+              "magnitude": 12700,
+              "unit": "EMU"
+            },
+            "dashStyle": "DASH"
+          },
+          "contentAlignment": "MIDDLE"
+        },
+        "fields": "shapeBackgroundFill,outline,contentAlignment"
+      }
+    }
+  ]
+}

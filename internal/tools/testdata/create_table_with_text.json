@@ -1,0 +1,415 @@
+{
+  "requests": [
+    {
+      "createTable": {
+        "objectId": "table_test",
+        "elementProperties": {
+          "pageObjectId": "slide1",
+          "size": {
+            "width": {
+              "magnitude": 8229600,
+              "unit": "EMU"
+            },
+            "height": {
+              "magnitude": 1200000,
+              "unit": "EMU"
+            }
+          },
+          "transform": {
+            "scaleX": 1,
+            "scaleY": 1,
+            "translateX": 457200,
+            "translateY": 1200000,
+            "unit": "EMU"
+          }
+        },
+        "rows": 2,
+        "columns": 3
+      }
+    },
+    {
+      "updateTableColumnProperties": {
+        "objectId": "table_test",
+        "columnIndices": [
+          0
+        ],
+        "tableColumnProperties": {
+          "columnWidth": {
+            "magnitude": 3000000,
+            "unit": "EMU"
+          }
+        },
+        "fields": "columnWidth"
+      }
+    },
+    {
+      "updateTableColumnProperties": {
+        "objectId": "table_test",
+        "columnIndices": [
+          1
+        ],
+        "tableColumnProperties": {
+          "columnWidth": {
+            "magnitude": 2600000,
+            "unit": "EMU"
+          }
+        },
+        "fields": "columnWidth"
+      }
+    },
+    {
+      "updateTableColumnProperties": {
+        "objectId": "table_test",
+        "columnIndices": [
+          2
+        ],
+        "tableColumnProperties": {
+          "columnWidth": {
+            "magnitude": 2629600,
+            "unit": "EMU"
+          }
+        },
+        "fields": "columnWidth"
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 0,
+          "columnIndex": 0
+        },
+        "text": "Метрика",
+        "insertionIndex": 0
+      }
+    },
+    {
+      "updateTextStyle": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 0,
+          "columnIndex": 0
+        },
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "bold": true,
+          "fontFamily": "Roboto",
+          "fontSize": {
+            "magnitude": 12,
+            "unit": "PT"
+          },
+          "foregroundColor": {
+            "opaqueColor": {
+              "rgbColor": {
+                "red": 0.1,
+                "green": 0.1,
+                "blue": 0.1
+              }
+            }
+          }
+        },
+        "fields": "fontSize,fontFamily,foregroundColor,bold"
+      }
+    },
+    {
+      "updateParagraphStyle": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 0,
+          "columnIndex": 0
+        },
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "alignment": "START"
+        },
+        "fields": "alignment"
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 0,
+          "columnIndex": 1
+        },
+        "text": "Было",
+        "insertionIndex": 0
+      }
+    },
+    {
+      "updateTextStyle": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 0,
+          "columnIndex": 1
+        },
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "bold": true,
+          "fontFamily": "Roboto",
+          "fontSize": {
+            "magnitude": 12,
+            "unit": "PT"
+          },
+          "foregroundColor": {
+            "opaqueColor": {
+              "rgbColor": {
+                "red": 0.1,
+                "green": 0.1,
+                "blue": 0.1
+              }
+            }
+          }
+        },
+        "fields": "fontSize,fontFamily,foregroundColor,bold"
+      }
+    },
+    {
+      "updateParagraphStyle": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 0,
+          "columnIndex": 1
+        },
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "alignment": "CENTER"
+        },
+        "fields": "alignment"
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 0,
+          "columnIndex": 2
+        },
+        "text": "Стало",
+        "insertionIndex": 0
+      }
+    },
+    {
+      "updateTextStyle": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 0,
+          "columnIndex": 2
+        },
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "bold": true,
+          "fontFamily": "Roboto",
+          "fontSize": {
+            "magnitude": 12,
+            "unit": "PT"
+          },
+          "foregroundColor": {
+            "opaqueColor": {
+              "rgbColor": {
+                "red": 0.1,
+                "green": 0.1,
+                "blue": 0.1
+              }
+            }
+          }
+        },
+        "fields": "fontSize,fontFamily,foregroundColor,bold"
+      }
+    },
+    {
+      "updateParagraphStyle": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 0,
+          "columnIndex": 2
+        },
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "alignment": "CENTER"
+        },
+        "fields": "alignment"
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 0
+        },
+        "text": "Холодный старт",
+        "insertionIndex": 0
+      }
+    },
+    {
+      "updateTextStyle": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 0
+        },
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "fontFamily": "Roboto",
+          "fontSize": {
+            "magnitude": 11,
+            "unit": "PT"
+          },
+          "foregroundColor": {
+            "opaqueColor": {
+              "rgbColor": {
+                "red": 0.1,
+                "green": 0.1,
+                "blue": 0.1
+              }
+            }
+          }
+        },
+        "fields": "fontSize,fontFamily,foregroundColor"
+      }
+    },
+    {
+      "updateParagraphStyle": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 0
+        },
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "alignment": "START"
+        },
+        "fields": "alignment"
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 1
+        },
+        "text": "4.2",
+        "insertionIndex": 0
+      }
+    },
+    {
+      "updateTextStyle": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 1
+        },
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "fontFamily": "Roboto",
+          "fontSize": {
+            "magnitude": 11,
+            "unit": "PT"
+          },
+          "foregroundColor": {
+            "opaqueColor": {
+              "rgbColor": {
+                "red": 0.1,
+                "green": 0.1,
+                "blue": 0.1
+              }
+            }
+          }
+        },
+        "fields": "fontSize,fontFamily,foregroundColor"
+      }
+    },
+    {
+      "updateParagraphStyle": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 1
+        },
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "alignment": "END"
+        },
+        "fields": "alignment"
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 2
+        },
+        "text": "2",
+        "insertionIndex": 0
+      }
+    },
+    {
+      "updateTextStyle": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 2
+        },
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "fontFamily": "Roboto",
+          "fontSize": {
+            "magnitude": 11,
+            "unit": "PT"
+          },
+          "foregroundColor": {
+            "opaqueColor": {
+              "rgbColor": {
+                "red": 0.1,
+                "green": 0.1,
+                "blue": 0.1
+              }
+            }
+          }
+        },
+        "fields": "fontSize,fontFamily,foregroundColor"
+      }
+    },
+    {
+      "updateParagraphStyle": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 2
+        },
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "alignment": "END"
+        },
+        "fields": "alignment"
+      }
+    }
+  ]
+}

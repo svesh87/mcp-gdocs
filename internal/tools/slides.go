@@ -86,6 +86,7 @@ func (r *registry) registerSlides(srv *server.MCPServer) {
 	r.registerSlidesPage(srv)
 	r.registerSlidesShape(srv)
 	r.registerSlidesTheme(srv)
+	r.registerSlidesExtra(srv)
 
 	srv.AddTool(mcp.NewTool("gdocs_slides_inspect_text_structure",
 		mcp.WithDescription("Read what is inside one text box of a slide: its paragraphs, their text, "+

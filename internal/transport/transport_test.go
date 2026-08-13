@@ -74,7 +74,10 @@ func TestHandlerRoutes(t *testing.T) {
 		}),
 	}
 
-	handler := NewHandler(mcpServer, "secret", pages)
+	handler := NewHandler(map[string]*server.MCPServer{
+		MCPPath:             mcpServer,
+		MCPPath + "/slides": server.NewMCPServer("test", "0.0.0"),
+	}, "secret", pages)
 
 	// Health carries no token: the image is built FROM scratch, and a container
 	// healthcheck has no shell to read one with.
@@ -96,5 +99,13 @@ func TestHandlerRoutes(t *testing.T) {
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, MCPPath, strings.NewReader("{}")))
 	if recorder.Code != http.StatusUnauthorized {
 		t.Errorf("the MCP endpoint should demand a token, got %d", recorder.Code)
+	}
+
+	// A family's own path is a second window on the same process, and it is guarded the
+	// same way: one token for the server, not one per set of tools.
+	recorder = httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, MCPPath+"/slides", strings.NewReader("{}")))
+	if recorder.Code != http.StatusUnauthorized {
+		t.Errorf("a family endpoint should demand a token too, got %d", recorder.Code)
 	}
 }

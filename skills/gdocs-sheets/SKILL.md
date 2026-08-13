@@ -95,7 +95,7 @@ There is no thumbnail for a sheet, so the check is the reading itself:
 1. **Read both workbooks back and compare** — every value, every reported property of every
    cell, every dropdown, every width and height. Anything that differs has a name, and the
    name is what gets fixed. Work from the noisiest field down.
-2. **Export both to PDF** (`gdocs_export_file`, format `pdf`) and compare the pages pixel
+2. **Export both to PDF** (`gdocs_drive_export_file`, format `pdf`) and compare the pages pixel
    for pixel when the render matters. This catches what no reading can say — above all the
    colours of dropdown options, which is where a copy that matches on every single field
    still looks different.

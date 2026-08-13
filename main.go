@@ -132,19 +132,26 @@ func serve(cfg *config.Config) error {
 	// to start without a token would make signing in impossible.
 	provider := &lazyClients{authenticator: authenticator}
 
-	mcpServer := server.NewMCPServer("mcp-gdocs", version, server.WithToolCapabilities(true))
-	if err := tools.Register(mcpServer, tools.Options{
-		Clients:    provider,
-		AllowWrite: cfg.AllowWrite,
-		FilesDir:   cfg.FilesDir,
-		Groups:     groups,
-	}); err != nil {
+	mcpServer, err := newToolServer(cfg, provider, groups)
+	if err != nil {
 		return err
 	}
 
 	if cfg.Transport == config.TransportHTTP {
+		// One process, several windows on it: /mcp is the whole set, and each family
+		// has a path of its own so a project that needs one of them does not carry the
+		// other ninety tool descriptions in its context.
+		servers := map[string]*server.MCPServer{transport.MCPPath: mcpServer}
+		for _, family := range tools.Families() {
+			narrowed, err := newToolServer(cfg, provider, tools.Narrow(groups, family))
+			if err != nil {
+				return err
+			}
+			servers[transport.MCPPath+"/"+family] = narrowed
+		}
+
 		pages := auth.NewWebLogin(authenticator, cfg.AuthToken).Handlers()
-		return transport.ServeHTTP(mcpServer, cfg.Address, cfg.AuthToken, pages)
+		return transport.ServeHTTP(servers, cfg.Address, cfg.AuthToken, pages)
 	}
 
 	served := make(chan error, 1)
@@ -156,6 +163,23 @@ func serve(cfg *config.Config) error {
 	case <-ctx.Done():
 		return nil
 	}
+}
+
+// newToolServer builds one MCP server offering one set of tool groups. Several of them
+// share everything else: the same client provider, the same token, the same sign-in.
+func newToolServer(cfg *config.Config, provider tools.Clients, groups map[tools.Group]bool) (*server.MCPServer, error) {
+	mcpServer := server.NewMCPServer("mcp-gdocs", version, server.WithToolCapabilities(true))
+
+	if err := tools.Register(mcpServer, tools.Options{
+		Clients:    provider,
+		AllowWrite: cfg.AllowWrite,
+		FilesDir:   cfg.FilesDir,
+		Groups:     groups,
+	}); err != nil {
+		return nil, err
+	}
+
+	return mcpServer, nil
 }
 
 // login signs in from a machine that has a browser.

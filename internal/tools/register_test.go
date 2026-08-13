@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -47,22 +48,29 @@ func registeredTools(t *testing.T, allowWrite bool) []string {
 }
 
 // deletionTools is every tool this server is allowed to offer that removes anything, and
-// the list is the rule: removal stops at the edge of the file it works in.
+// the list is the rule: removal stops at the bin.
 //
-// Inside a presentation or a document, removal is ordinary editing — a copied deck has to
-// come down to the slides that apply, a step that landed wrong leaves a paragraph or a
-// table behind, and without a way back the only repair is a person in a browser. Outside
-// one, nothing: no file, no folder, no drive. That is the line, and a name added here
-// without moving it is a name that fails the tests below.
+// Inside a presentation, a document or a workbook, removal is ordinary editing — a copied
+// deck has to come down to the slides that apply, a step that landed wrong leaves a
+// paragraph or a table behind, and without a way back the only repair is a person in a
+// browser. A file itself goes no further than the bin, which its owner can undo. Emptying
+// that bin, deleting a file outright, and removing a folder or a drive are absent. A name
+// added here without that being true of it is a name that fails the tests below.
 var deletionTools = []string{
 	"gdocs_slides_delete",
 	"gdocs_docs_delete",
+	"gdocs_sheets_delete",
+	"gdocs_drive_delete_to_trash",
 }
 
-// TestDeletionStopsInsideTheFile keeps that line where it is.
-func TestDeletionStopsInsideTheFile(t *testing.T) {
+// TestDeletionStopsAtTheBin keeps that line where it is.
+//
+// The check runs with every group switched on, which is the state the list is about: with
+// the default set there is no removal at all, and a test run against that would pass while
+// saying nothing.
+func TestDeletionStopsAtTheBin(t *testing.T) {
 	for _, allowWrite := range []bool{false, true} {
-		for _, name := range registeredTools(t, allowWrite) {
+		for _, name := range namesOf(t, serverWith(t, everyGroup(), allowWrite)) {
 			if contains(deletionTools, name) {
 				if !allowWrite {
 					t.Errorf("%s changes a document and must not exist without --allow-write", name)
@@ -80,16 +88,37 @@ func TestDeletionStopsInsideTheFile(t *testing.T) {
 	}
 }
 
-// TestNoDeletionOfFilesThemselves is the half of the rule that has not moved: Drive and
-// the file tools have no removal in them at all, whatever happens inside a document.
-func TestNoDeletionOfFilesThemselves(t *testing.T) {
-	for _, name := range registeredTools(t, true) {
-		if !strings.HasPrefix(name, "gdocs_slides_") && !strings.HasPrefix(name, "gdocs_docs_") {
-			for _, forbidden := range []string{"delete", "remove", "trash", "destroy"} {
-				if strings.Contains(name, forbidden) {
-					t.Errorf("%s deletes something outside a document or a presentation", name)
-				}
+// TestRemovalIsNeverInTheDefaultSet: a configuration that says nothing gets no removal,
+// so an agent cannot delete anything until somebody decided it should be able to.
+func TestRemovalIsNeverInTheDefaultSet(t *testing.T) {
+	for _, name := range namesOf(t, serverWith(t, nil, true)) {
+		if contains(deletionTools, name) {
+			t.Errorf("%s is in the default set; removal has to be asked for by name", name)
+		}
+	}
+}
+
+// TestNothingGoesPastTheBin is the half of the rule that has not moved. A file can be put
+// in the bin, where its owner can find it again; there is no tool that empties the bin,
+// deletes a file outright, or removes a folder or a drive, and no code behind one either.
+func TestNothingGoesPastTheBin(t *testing.T) {
+	for _, name := range namesOf(t, serverWith(t, everyGroup(), true)) {
+		for _, forbidden := range []string{
+			"empty_trash", "delete_forever", "delete_permanently", "purge",
+			"delete_file", "delete_folder", "delete_drive", "destroy",
+		} {
+			if strings.Contains(name, forbidden) {
+				t.Errorf("%s goes past the bin, which nothing here may do", name)
 			}
+		}
+	}
+
+	// And the client behind the tools has no such call either: a tool is easy to add back,
+	// a method that already exists is easier still.
+	for _, forbidden := range []string{"EmptyTrash", "DeleteFile", "DeleteFolder", "DeleteDrive"} {
+		if clientHasMethod(forbidden) {
+			t.Errorf("the Google client has a %s method; the tools are not the only place this "+
+				"has to be absent", forbidden)
 		}
 	}
 }
@@ -199,6 +228,12 @@ func TestGeneratedObjectIDsAreUsable(t *testing.T) {
 			t.Errorf("the identifier %q carries %q, which Slides does not accept", first, r)
 		}
 	}
+}
+
+// clientHasMethod asks whether the Google client carries a method by that name.
+func clientHasMethod(name string) bool {
+	_, found := reflect.TypeOf(&google.Client{}).MethodByName(name)
+	return found
 }
 
 func contains(list []string, want string) bool {

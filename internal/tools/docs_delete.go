@@ -46,6 +46,9 @@ func (r *registry) registerDocsDelete(srv *server.MCPServer) {
 		mcp.WithString("header_id", mcp.Description("Header segment to remove, with everything in it.")),
 		mcp.WithString("footer_id", mcp.Description("Footer segment to remove, with everything in it.")),
 		mcp.WithString("positioned_object_id", mcp.Description("Floating object to remove.")),
+		mcp.WithString("tab_id", mcp.Description("Tab to remove, with everything on it.")),
+		mcp.WithString("named_range", mcp.Description(
+			"Named range to forget. The text it covered stays where it is; only the name goes.")),
 		mcp.WithDestructiveHintAnnotation(true),
 	), r.docsDelete)
 }
@@ -85,12 +88,17 @@ func docsDeleteRequest(req mcp.CallToolRequest) (*google.DocsRequest, map[string
 	headerID := optionalString(req, "header_id")
 	footerID := optionalString(req, "footer_id")
 	objectID := optionalString(req, "positioned_object_id")
+	tabID := optionalString(req, "tab_id")
+	namedRange := optionalString(req, "named_range")
 	tableStart := req.GetInt("table_start_index", 0)
 	start := req.GetInt("start_index", 0)
 	end := req.GetInt("end_index", 0)
 
 	named := 0
-	for _, given := range []bool{headerID != "", footerID != "", objectID != "", tableStart > 0, start > 0 || end > 0} {
+	for _, given := range []bool{
+		headerID != "", footerID != "", objectID != "", tabID != "", namedRange != "",
+		tableStart > 0, start > 0 || end > 0,
+	} {
 		if given {
 			named++
 		}
@@ -99,7 +107,7 @@ func docsDeleteRequest(req mcp.CallToolRequest) (*google.DocsRequest, map[string
 	case named == 0:
 		return nil, nil, fmt.Errorf("name one thing to remove: a range with start_index and end_index, " +
 			"a table with table_start_index and what=row or what=column, a header_id, a footer_id, " +
-			"or a positioned_object_id")
+			"a positioned_object_id, a tab_id, or a named_range")
 	case named > 1:
 		return nil, nil, fmt.Errorf("this call names more than one thing to remove; make one call each, " +
 			"so what goes is what was meant")
@@ -117,6 +125,17 @@ func docsDeleteRequest(req mcp.CallToolRequest) (*google.DocsRequest, map[string
 	case objectID != "":
 		return &google.DocsRequest{DeletePositioned: &google.DocsDeletePositioned{ObjectID: objectID}},
 			map[string]any{"removed": "positioned_object", "positioned_object_id": objectID}, nil
+
+	case tabID != "":
+		return &google.DocsRequest{DeleteTab: &google.DocsDeleteTab{TabID: tabID}},
+			map[string]any{"removed": "tab", "tab_id": tabID}, nil
+
+	case namedRange != "":
+		// The name goes; the text it covered stays. Worth saying in the answer, because
+		// "delete the named range" reads like it would take the contents with it.
+		return &google.DocsRequest{DeleteNamedRange: &google.DocsDeleteNamedRange{Name: namedRange}},
+			map[string]any{"removed": "named_range", "named_range": namedRange,
+				"note": "the name is gone, the text it covered is untouched"}, nil
 
 	case tableStart > 0:
 		cell := google.DocsTableCellLocation{

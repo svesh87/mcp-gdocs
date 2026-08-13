@@ -37,21 +37,59 @@ Each of these is a decision, not an implementation detail:
 The approach comes from a working server a colleague wrote for exactly this problem;
 this is that behaviour in Go, with the rest of the Google editors around it.
 
-## No deletion, anywhere
+## Removal stops at the bin
 
-There is no tool that deletes a file, a slide, a tab or a row — not disabled, not behind
-a flag: no code that could. An agent that tidied up a shared drive is an incident nobody
-can undo, and the cheapest way not to have it is to have nothing that does it. A test
-enforces this against the registered tool names.
+Inside a presentation, a document or a workbook, removal is ordinary editing: a copied
+deck comes down to the slides that apply, and a step that landed wrong leaves a paragraph
+or a table behind that somebody has to be able to take out. A file itself goes no further
+than the bin, where its owner can find it again for thirty days. Emptying that bin,
+deleting a file outright, and removing a folder or a drive have no code here at all — a
+test checks that, and checks the client behind the tools as well.
+
+None of it is on by default. Every removing tool lives in a group of its own —
+`slides-delete`, `docs-delete`, `sheets-delete`, `drive-delete` — and a configuration that
+wants one names it: `--tools=all,docs-delete`. The same is true of sharing, which is the
+one thing here that makes something visible outside the account and lives in `drive-share`.
 
 Everything that changes anything at all needs `--allow-write`. Without it the server
 offers only the reading tools.
 
+## Choosing the set of tools
+
+A hundred and thirty-five tool descriptions in an agent's context is a hundred and thirty
+it will never call. `--tools` picks what a server offers, by family and by what the tools
+do:
+
+```
+--tools=slides-read,docs-read     # exactly those two groups
+--tools=docs                      # the family: reading and writing, no removal
+--tools=all,sheets-delete         # everything ordinary, plus one kind of removal
+GDOCS_TOOLS=drive-read            # the same through the environment, for compose
+```
+
+The groups are `slides-`, `sheets-`, `docs-` and `drive-`, each with `read`, `write` and
+`delete`, plus `drive-share`. Naming a family means its reading and writing halves; `all`
+means everything except removal and sharing. An unknown name is refused at startup with
+the list of the known ones. Left out altogether, the set is what it has always been:
+everything except removal and sharing.
+
+Over HTTP the same process also serves one path per family, so a project can connect to
+just the one it needs:
+
+```
+/mcp          the whole set
+/mcp/slides   /mcp/sheets   /mcp/docs   /mcp/drive
+```
+
+They are windows on one server — same sign-in, same token, same token store — and a
+window cannot show what `--tools` did not allow.
+
 ## Tools
 
-Fifty-five of them: seventeen that read, thirty-eight that change something. A server
-started without `--allow-write` registers the reading ones and nothing else, and the three
-that touch the disk appear only when `--files-dir` names a directory they may use.
+A hundred and thirty-five of them, covering every request the three APIs have except the
+five that reach BigQuery. A server started without `--allow-write` registers the reading
+ones and nothing else, and the three that touch the disk appear only when `--files-dir`
+names a directory they may use.
 
 They come in pairs on purpose: whatever a reading tool reports, a writing tool takes back
 in the same units. There is no tool that copies styling from one deck into another in one
@@ -78,8 +116,14 @@ Reading, always offered:
 | `gdocs_sheets_read_dropdown_colors` | the colours a dropdown paints its options in, which no API answer carries |
 | `gdocs_docs_read` | a document as text, tables tab-separated |
 | `gdocs_docs_read_structure` | a document as it is built: paragraphs, runs, lists, tables, sections, headers, named styles, pictures |
+| `gdocs_docs_list_named_ranges` | the names in a document and where they currently are |
+| `gdocs_sheets_list_metadata` | labels attached to rows, columns or tabs, which move with them |
 | `gdocs_drive_search` | files across Drive and shared drives |
 | `gdocs_drive_file_info` | one file's name, kind, owners and folders |
+| `gdocs_drive_list_folder` | what is in a folder |
+| `gdocs_drive_list_permissions` | who can reach a file, and whether it is open by link |
+| `gdocs_drive_list_comments` | comments with their replies, what they hang on, and whether they are resolved |
+| `gdocs_drive_list_revisions` | the saved versions of a file |
 | `gdocs_drive_export` | a file exported to another format |
 
 Writing, only with `--allow-write`.
@@ -168,8 +212,38 @@ Sheets, Docs and Drive:
 | `gdocs_docs_insert_image` | a picture from an address Google can fetch |
 | `gdocs_docs_insert_page_break` | start a new page |
 | `gdocs_docs_insert_footnote` | a footnote and the segment to write it in |
-| `gdocs_docs_delete` | remove something inside a document: a range, a table row or column, a header, a footer, a floating object, the bullets of a list |
+| `gdocs_docs_add_named_range` | name a stretch of a document, so later edits find it without counting characters |
+| `gdocs_docs_fill_named_range` | replace what a named range holds — the safe way to fill a template |
+| `gdocs_docs_add_tab`, `gdocs_docs_update_tab` | tabs of a document |
+| `gdocs_docs_insert_chip` | a smart chip: a person, another Google file, or a date |
+| `gdocs_docs_replace_image` | swap a picture's content while it keeps its place and size |
+| `gdocs_docs_edit_table` | add a row or column to a table, or take a merge apart |
+| `gdocs_docs_delete` | remove something inside a document: a range, a table row or column, a header, a footer, a floating object, a tab, a named range, the bullets of a list |
+| `gdocs_slides_edit_table` | grow a table on a slide, or take a merge apart |
+| `gdocs_slides_set_table_borders` | the lines of a table, by position across a rectangle |
+| `gdocs_slides_replace_image` | swap a picture's content while it keeps its place and crop |
+| `gdocs_slides_replace_shapes_with_image` | turn every shape whose text matches into a picture |
+| `gdocs_slides_replace_shapes_with_chart` | the same, with a chart from a workbook |
+| `gdocs_slides_set_alt_text` | the description a screen reader reads out |
+| `gdocs_slides_route_line` | how a connector runs, and rerouting it after the shapes moved |
+| `gdocs_slides_add_sheets_chart`, `gdocs_slides_refresh_sheets_chart` | a live chart from a workbook |
+| `gdocs_slides_add_video` | a video from YouTube or Drive, with how it plays |
+| `gdocs_sheets_move_range` | copy or move a rectangle: values, formatting, formulas, validation |
+| `gdocs_sheets_paste_text` | paste delimited text or an HTML table, split on Google's side |
+| `gdocs_sheets_shape_range` | insert cells and push the rest aside, or shuffle rows |
+| `gdocs_sheets_append_rows` | add rows after the last one with anything in it |
+| `gdocs_sheets_update_chart` | move a chart, frame it, or change its titles |
+| `gdocs_sheets_filter_view` | a saved way of looking at a range, without changing anybody else's view |
+| `gdocs_sheets_slicer` | the control a reader clicks to filter by one column |
+| `gdocs_sheets_set_metadata` | a label that travels with the row it is attached to |
+| `gdocs_sheets_delete` | remove something inside a workbook: rows, columns, cells, a tab, a grouping, a banding, a rule, a protection, a named range, a filter view, duplicates, a chart, a table, a label |
 | `gdocs_drive_copy` | copy a file |
+| `gdocs_drive_create_folder` | make a folder |
+| `gdocs_drive_rename`, `gdocs_drive_move` | a file's name and where it sits |
+| `gdocs_drive_add_comment`, `gdocs_drive_reply_comment` | leave a comment, answer one, resolve a thread |
+| `gdocs_drive_keep_revision` | keep a version from being pruned |
+| `gdocs_drive_delete_to_trash` | put a file in the bin, or take it back out |
+| `gdocs_drive_share`, `gdocs_drive_unshare` | give access and take it back — only with `--tools=…,drive-share` |
 
 ## Access
 

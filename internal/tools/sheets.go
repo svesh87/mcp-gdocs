@@ -21,6 +21,9 @@ func (r *registry) registerSheets(srv *server.MCPServer) {
 	r.registerSheetsStructure(srv)
 	r.registerSheetsData(srv)
 	r.registerSheetsDropdown(srv)
+	r.registerSheetsDelete(srv)
+	r.registerSheetsMove(srv)
+	r.registerSheetsObjects(srv)
 
 	srv.AddTool(mcp.NewTool("gdocs_sheets_info",
 		mcp.WithDescription("Describe a spreadsheet: its title, its tabs, their identifiers and sizes. "+

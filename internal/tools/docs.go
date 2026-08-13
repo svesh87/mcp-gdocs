@@ -23,6 +23,7 @@ func (r *registry) registerDocs(srv *server.MCPServer) {
 
 	r.registerDocsRead(srv)
 	r.registerDocsWrite(srv)
+	r.registerDocsExtra(srv)
 	r.registerDocsDelete(srv)
 
 	if !r.opts.AllowWrite {

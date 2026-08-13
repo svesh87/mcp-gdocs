@@ -104,6 +104,38 @@ fill a table from its **last** cell backwards, or every insertion moves the next
 | a Google drawing | `kind: "drawing"` | **nothing reads or creates one** |
 | removing either | — | `delete` with a range, or `positioned_object_id` |
 
+## Pointing at a place that does not move
+
+Every index in this file shifts when anything is inserted before it. A **named range** does
+not: it is attached to the text rather than to a number, and it survives the edits that
+make every index stale. For a template filled more than once, this is the difference
+between a fill that works and one that works today.
+
+| What | Read with | Write with |
+|---|---|---|
+| the names and where they are | `list_named_ranges` | `add_named_range` over a range |
+| the text under a name | — | `fill_named_range`, no indexes involved |
+| forgetting a name | — | `delete` with `named_range`; the text stays |
+
+## Tabs
+
+A document can hold several tabs, the pages in the editor's left rail.
+
+| What | Read with | Write with |
+|---|---|---|
+| that they exist | `read_structure` reports the body of the first one | `add_tab`, with a parent to nest it |
+| name, position, icon | — | `update_tab` |
+| removing one | — | `delete` with `tab_id`, and everything on it goes |
+
+## Chips, and replacing a picture
+
+| What | Write with | Notes |
+|---|---|---|
+| a person chip | `insert_chip` kind=person | stays live, like typing @ in the editor |
+| a chip for another Google file | `insert_chip` kind=file | |
+| a date chip | `insert_chip` kind=date | needs an RFC 3339 timestamp |
+| swapping a picture's content | `replace_image` | keeps its place and size — the only way to change a picture already in a document |
+
 ## Removal, and where it stops
 
 `gdocs_docs_delete` reaches a range, a table row or column, a header, a footer, a floating

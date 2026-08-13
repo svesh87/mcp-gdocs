@@ -25,6 +25,22 @@ type Document struct {
 	Lists             map[string]DocsList         `json:"lists,omitempty"`
 	InlineObjects     map[string]DocsInlineObject `json:"inlineObjects,omitempty"`
 	PositionedObjects map[string]DocsPositioned   `json:"positionedObjects,omitempty"`
+	NamedRanges       map[string]DocsNamedRanges  `json:"namedRanges,omitempty"`
+}
+
+// DocsNamedRanges are the ranges sharing one name.
+type DocsNamedRanges struct {
+	Name        string           `json:"name,omitempty"`
+	NamedRanges []DocsNamedRange `json:"namedRanges,omitempty"`
+}
+
+// DocsNamedRange is one name over one or more stretches of the document. It is the only
+// way of pointing at a place that survives editing: the indexes around it move, the name
+// does not.
+type DocsNamedRange struct {
+	NamedRangeID string      `json:"namedRangeId,omitempty"`
+	Name         string      `json:"name,omitempty"`
+	Ranges       []DocsRange `json:"ranges,omitempty"`
 }
 
 // DocsBody is the document's content.
@@ -486,6 +502,113 @@ type DocsRequest struct {
 	DeleteFooter         *DocsDeleteFooter         `json:"deleteFooter,omitempty"`
 	DeletePositioned     *DocsDeletePositioned     `json:"deletePositionedObject,omitempty"`
 	DeleteBullets        *DocsDeleteBullets        `json:"deleteParagraphBullets,omitempty"`
+	AddTab               *DocsAddTab               `json:"addDocumentTab,omitempty"`
+	UpdateTab            *DocsUpdateTab            `json:"updateDocumentTabProperties,omitempty"`
+	DeleteTab            *DocsDeleteTab            `json:"deleteTab,omitempty"`
+	ReplaceNamedRange    *DocsReplaceNamedRange    `json:"replaceNamedRangeContent,omitempty"`
+	DeleteNamedRange     *DocsDeleteNamedRange     `json:"deleteNamedRange,omitempty"`
+	InsertPerson         *DocsInsertPerson         `json:"insertPerson,omitempty"`
+	InsertRichLink       *DocsInsertRichLink       `json:"insertRichLink,omitempty"`
+	InsertDate           *DocsInsertDate           `json:"insertDate,omitempty"`
+	ReplaceImage         *DocsReplaceImage         `json:"replaceImage,omitempty"`
+	UnmergeTableCells    *DocsUnmergeTableCells    `json:"unmergeTableCells,omitempty"`
+}
+
+// DocsTabProperties is a tab of a document: documents can hold several, side by side in
+// the editor's left rail.
+type DocsTabProperties struct {
+	TabID        string `json:"tabId,omitempty"`
+	Title        string `json:"title,omitempty"`
+	Index        *int   `json:"index,omitempty"`
+	ParentTabID  string `json:"parentTabId,omitempty"`
+	NestingLevel *int   `json:"nestingLevel,omitempty"`
+	IconEmoji    string `json:"iconEmoji,omitempty"`
+}
+
+// DocsAddTab makes another tab.
+type DocsAddTab struct {
+	Properties *DocsTabProperties `json:"tabProperties,omitempty"`
+}
+
+// DocsUpdateTab renames a tab or moves it.
+type DocsUpdateTab struct {
+	Properties *DocsTabProperties `json:"tabProperties"`
+	Fields     string             `json:"fields"`
+}
+
+// DocsDeleteTab removes a tab and everything on it.
+type DocsDeleteTab struct {
+	TabID string `json:"tabId"`
+}
+
+// DocsReplaceNamedRange puts text where a named range is, without anybody counting
+// indexes: the name survives edits that would have moved every number.
+type DocsReplaceNamedRange struct {
+	Name         string `json:"namedRangeName,omitempty"`
+	NamedRangeID string `json:"namedRangeId,omitempty"`
+	Text         string `json:"text"`
+}
+
+// DocsDeleteNamedRange forgets a name. The text it covered stays.
+type DocsDeleteNamedRange struct {
+	Name         string `json:"name,omitempty"`
+	NamedRangeID string `json:"namedRangeId,omitempty"`
+}
+
+// DocsPersonProperties is the person a chip stands for.
+type DocsPersonProperties struct {
+	Email string `json:"email"`
+	Name  string `json:"name,omitempty"`
+}
+
+// DocsInsertPerson puts a person chip into the text.
+type DocsInsertPerson struct {
+	Location   *DocsLocation         `json:"location,omitempty"`
+	EndOfDoc   *DocsSegmentEnd       `json:"endOfSegmentLocation,omitempty"`
+	Properties *DocsPersonProperties `json:"personProperties"`
+}
+
+// DocsRichLinkProperties is the file a chip points at.
+type DocsRichLinkProperties struct {
+	URI      string `json:"uri"`
+	Title    string `json:"title,omitempty"`
+	MimeType string `json:"mimeType,omitempty"`
+}
+
+// DocsInsertRichLink puts a chip for another Google file into the text.
+type DocsInsertRichLink struct {
+	Location   *DocsLocation           `json:"location,omitempty"`
+	EndOfDoc   *DocsSegmentEnd         `json:"endOfSegmentLocation,omitempty"`
+	Properties *DocsRichLinkProperties `json:"richLinkProperties"`
+}
+
+// DocsDateProperties is how a date chip is shown.
+type DocsDateProperties struct {
+	Timestamp   string `json:"timestamp,omitempty"`
+	DateFormat  string `json:"dateFormat,omitempty"`
+	TimeFormat  string `json:"timeFormat,omitempty"`
+	Locale      string `json:"locale,omitempty"`
+	TimeZoneID  string `json:"timeZoneId,omitempty"`
+	DisplayText string `json:"displayText,omitempty"`
+}
+
+// DocsInsertDate puts a date chip into the text.
+type DocsInsertDate struct {
+	Location   *DocsLocation       `json:"location,omitempty"`
+	EndOfDoc   *DocsSegmentEnd     `json:"endOfSegmentLocation,omitempty"`
+	Properties *DocsDateProperties `json:"dateElementProperties"`
+}
+
+// DocsReplaceImage swaps a picture's bytes while it keeps its place and its size.
+type DocsReplaceImage struct {
+	ImageObjectID string `json:"imageObjectId"`
+	URI           string `json:"uri"`
+	Method        string `json:"imageReplaceMethod,omitempty"`
+}
+
+// DocsUnmergeTableCells takes a merged rectangle apart again.
+type DocsUnmergeTableCells struct {
+	Range DocsTableRange `json:"tableRange"`
 }
 
 // DocsDeleteTableRow takes out the row a cell is in.

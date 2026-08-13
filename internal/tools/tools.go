@@ -89,6 +89,7 @@ func Register(srv *server.MCPServer, opts Options) error {
 	r.registerSheets(srv)
 	r.registerDocs(srv)
 	r.registerDrive(srv)
+	r.registerDriveManage(srv)
 	r.registerFiles(srv)
 
 	return keepGroups(srv, opts.Groups)

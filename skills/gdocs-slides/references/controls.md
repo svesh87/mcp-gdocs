@@ -7,6 +7,11 @@ writes it*.
 Everything a reading reports, a writing takes back in the same units. There is no tool that
 copies styling from one deck into another: you read numbers, decide, and write numbers.
 
+**A tool that is missing was switched off, not forgotten.** The server is started with a
+set of groups — `slides-read`, `slides-write`, `slides-delete` — and removal is never in
+the default set. A name absent from the listing is the configuration talking; work with
+what is there and say what could not be done, rather than looking for a way around.
+
 Units, once: **EMU** for positions and sizes (914400 to the inch, 12700 to the point; a
 slide is 9144000 × 5143500), **points** for font sizes and the space around paragraphs,
 **percent** for line spacing (100 is single), **UTF-16 code units** for every text range.
@@ -73,15 +78,34 @@ shape with one), `gdocs_slides_create_line`, `gdocs_slides_insert_image`,
 | cell fills | `read_table` | `style_table` (`fill`) |
 | per-cell text style and alignment | `read_table` | `style_table` (`cell_styles`) |
 | vertical alignment of cell content | `read_table` | `style_table` (`content_alignment`) |
+| the lines of a table | `read_table` | `gdocs_slides_set_table_borders` — by position (ALL, OUTER, INNER, one side), across the whole table or a rectangle |
+| more rows or columns after it exists | `read_table` | `gdocs_slides_edit_table` (`insert_rows`, `insert_columns`) |
+| taking a merge apart | `read_table` | `gdocs_slides_edit_table` (`unmerge`) |
+
+Borders are the one part of a table not written per cell: a position and a rectangle, so
+the frame comes out even instead of showing seams where two cells disagreed.
+
+## Pictures, charts and video
+
+| To do | Tool | Notes |
+|---|---|---|
+| swap a picture's content, keeping place and crop | `gdocs_slides_replace_image` | the only way to change a picture already on a slide |
+| turn every shape whose text matches into a picture | `gdocs_slides_replace_shapes_with_image` | a template marked `{{photo}}` becomes an illustrated deck in one call |
+| the same with a chart from a workbook | `gdocs_slides_replace_shapes_with_chart` | |
+| a chart from a workbook, placed by hand | `gdocs_slides_add_sheets_chart` | linked, it can be brought up to date later |
+| bring a linked chart up to date | `gdocs_slides_refresh_sheets_chart` | a deck built last quarter shows last quarter's numbers until this is called |
+| a video from YouTube or Drive | `gdocs_slides_add_video` | with autoplay, mute, start and end |
+| the description a screen reader reads out | `gdocs_slides_set_alt_text` | nothing else writes it |
+| how a connector runs, and rerouting it | `gdocs_slides_route_line` | a connector drawn before its shapes were placed stays where it was drawn until this is called |
 
 ## Files
 
 | To do | Tool |
 |---|---|
-| render the whole deck to pictures | `gdocs_export_slide_images` |
+| render the whole deck to pictures | `gdocs_slides_export_images` |
 | render one slide to a short-lived address | `gdocs_slides_export_thumbnail` |
-| save a deck as PDF, PPTX, ODP … | `gdocs_export_file` |
-| bring a .pptx back in as a Google presentation | `gdocs_import_file` |
+| save a deck as PDF, PPTX, ODP … | `gdocs_drive_export_file` |
+| bring a .pptx back in as a Google presentation | `gdocs_drive_import_file` |
 | look up shapes, bullet presets, arrowheads, dashes, theme colour names, units | `gdocs_reference` |
 
 The exports need the server started with `--files-dir`; importing also needs
@@ -89,8 +113,13 @@ The exports need the server started with `--files-dir`; importing also needs
 
 ## What no tool here does
 
-- **Delete anything outside a presentation.** No files, no folders, no spreadsheet tabs, no
-  rows. There is no such tool and there will not be one.
+- **Delete a file, a folder or a drive.** A presentation can be put in the bin with
+  `gdocs_drive_delete_to_trash`, where its owner finds it again for thirty days, and only
+  when the server was started with `drive-delete`. Nothing empties that bin.
+- **Make a new layout or apply another deck's theme.** The API has neither request. What
+  it does have: the colour scheme and the existing layouts of a deck can be rewritten
+  (`set_theme_colors`, `style_layout`), and a deck that must look like a sample is started
+  as a copy of it.
 - **Send arbitrary API requests.** Every tool builds its own; a caller cannot hand the
   server a batch.
 - **Copy styling from one deck to another in one call.** Read, decide, write.

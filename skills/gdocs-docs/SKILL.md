@@ -19,6 +19,11 @@ nothing like the sample — an empty paragraph wedged in front of every table, l
 that are text starting with "•", a header on page one that should not be there, and a
 table with a black frame the sample has not got.
 
+**A tool that is missing was switched off, not forgotten.** The server is started with a
+set of groups — `docs-read`, `docs-write`, `docs-delete` — and removal is never in the
+default set. A name absent from the listing is the configuration talking; do what can be
+done and say plainly what could not.
+
 Two references sit beside this file:
 
 - **[references/controls.md](references/controls.md)** — every knob: what reads it, what
@@ -81,7 +86,7 @@ next if they were swapped.
 1. **Read both back and compare** — element by element, then field by field. A copy built
    in the same order pairs up positionally; line the two up **from the end**, because
    anything extra at the top would otherwise shift every pair by one.
-2. **Export both to PDF** (`gdocs_export_file`) and compare the pages. This catches what
+2. **Export both to PDF** (`gdocs_drive_export_file`) and compare the pages. This catches what
    no reading can say: a picture in the line of text where the sample has it floating, a
    paragraph that broke to the next page, a table frame nobody asked for.
 3. **Say what is left over.** Some of it always is — the floating objects and the drawings

@@ -195,6 +195,37 @@ func ParseGroups(value string) (map[Group]bool, error) {
 // GroupNames lists every group, for a message to an operator.
 func GroupNames() []string { return groupNames() }
 
+// Families lists the families a set can be narrowed to, which is also the list of
+// sub-paths the HTTP transport serves.
+func Families() []string { return familyNames() }
+
+// Narrow keeps only the groups of one family, and always the common ones.
+//
+// This is what makes /mcp/slides a window on the same process rather than a second
+// configuration: the family cannot widen what --tools allowed, only cut it down.
+func Narrow(enabled map[Group]bool, family string) map[Group]bool {
+	wanted := map[Group]bool{}
+	for _, group := range families[family] {
+		wanted[group] = true
+	}
+	// The family shorthand covers reading and writing; removal and sharing of that same
+	// family belong to it too, when the configuration allowed them at all.
+	for _, group := range allGroups {
+		if strings.HasPrefix(string(group), family+"-") {
+			wanted[group] = true
+		}
+	}
+
+	narrowed := map[Group]bool{Common: true}
+	for group := range wanted {
+		if enabled[group] {
+			narrowed[group] = true
+		}
+	}
+
+	return narrowed
+}
+
 func groupNames() []string {
 	names := make([]string, 0, len(allGroups))
 	for _, group := range allGroups {

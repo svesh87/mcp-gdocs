@@ -240,6 +240,158 @@ type Request struct {
 	CreateLine                  *CreateLineRequest                  `json:"createLine,omitempty"`
 	UpdateLineProperties        *UpdateLinePropertiesRequest        `json:"updateLineProperties,omitempty"`
 	DuplicateObject             *DuplicateObjectRequest             `json:"duplicateObject,omitempty"`
+	InsertTableRows             *InsertTableRowsRequest             `json:"insertTableRows,omitempty"`
+	InsertTableColumns          *InsertTableColumnsRequest          `json:"insertTableColumns,omitempty"`
+	UnmergeTableCells           *UnmergeTableCellsRequest           `json:"unmergeTableCells,omitempty"`
+	UpdateTableBorder           *UpdateTableBorderRequest           `json:"updateTableBorderProperties,omitempty"`
+	ReplaceImage                *ReplaceImageRequest                `json:"replaceImage,omitempty"`
+	ReplaceShapesWithImage      *ReplaceShapesWithImageRequest      `json:"replaceAllShapesWithImage,omitempty"`
+	ReplaceShapesWithChart      *ReplaceShapesWithChartRequest      `json:"replaceAllShapesWithSheetsChart,omitempty"`
+	UpdateAltText               *UpdateAltTextRequest               `json:"updatePageElementAltText,omitempty"`
+	RerouteLine                 *RerouteLineRequest                 `json:"rerouteLine,omitempty"`
+	UpdateLineCategory          *UpdateLineCategoryRequest          `json:"updateLineCategory,omitempty"`
+	CreateSheetsChart           *CreateSheetsChartRequest           `json:"createSheetsChart,omitempty"`
+	RefreshSheetsChart          *RefreshSheetsChartRequest          `json:"refreshSheetsChart,omitempty"`
+	CreateVideo                 *CreateVideoRequest                 `json:"createVideo,omitempty"`
+	UpdateVideoProperties       *UpdateVideoPropertiesRequest       `json:"updateVideoProperties,omitempty"`
+}
+
+// InsertTableRowsRequest grows a table by rows, beside a cell that says where.
+type InsertTableRowsRequest struct {
+	TableObjectID string        `json:"tableObjectId"`
+	CellLocation  *CellLocation `json:"cellLocation,omitempty"`
+	InsertBelow   bool          `json:"insertBelow"`
+	Number        int           `json:"number,omitempty"`
+}
+
+// InsertTableColumnsRequest grows a table by columns.
+type InsertTableColumnsRequest struct {
+	TableObjectID string        `json:"tableObjectId"`
+	CellLocation  *CellLocation `json:"cellLocation,omitempty"`
+	InsertRight   bool          `json:"insertRight"`
+	Number        int           `json:"number,omitempty"`
+}
+
+// UnmergeTableCellsRequest takes a merged rectangle apart again.
+type UnmergeTableCellsRequest struct {
+	ObjectID   string      `json:"objectId"`
+	TableRange *TableRange `json:"tableRange"`
+}
+
+// TableBorderFill is what a table's border line is filled with.
+type TableBorderFill struct {
+	SolidFill *SolidFill `json:"solidFill,omitempty"`
+}
+
+// TableBorderProperties is how one set of a table's lines is drawn.
+type TableBorderProperties struct {
+	Fill      *TableBorderFill `json:"tableBorderFill,omitempty"`
+	Weight    *Dimension       `json:"weight,omitempty"`
+	DashStyle string           `json:"dashStyle,omitempty"`
+}
+
+// UpdateTableBorderRequest draws the lines of a table.
+//
+// The borders are addressed by position — ALL, OUTER, INNER, and each single side — rather
+// than per cell, which is why a table's frame is one request and not a loop over cells.
+type UpdateTableBorderRequest struct {
+	ObjectID   string                 `json:"objectId"`
+	TableRange *TableRange            `json:"tableRange,omitempty"`
+	Position   string                 `json:"borderPosition,omitempty"`
+	Properties *TableBorderProperties `json:"tableBorderProperties"`
+	Fields     string                 `json:"fields"`
+}
+
+// ReplaceImageRequest swaps a picture's bytes while it keeps its place and its size.
+type ReplaceImageRequest struct {
+	ImageObjectID string `json:"imageObjectId"`
+	URL           string `json:"url"`
+	Method        string `json:"imageReplaceMethod,omitempty"`
+}
+
+// ReplaceShapesWithImageRequest turns every shape whose text matches into a picture. It is
+// how a deck built from a template gets its illustrations without anybody placing them.
+type ReplaceShapesWithImageRequest struct {
+	ContainsText  *SlidesTextMatch `json:"containsText"`
+	ImageURL      string           `json:"imageUrl"`
+	Method        string           `json:"imageReplaceMethod,omitempty"`
+	PageObjectIDs []string         `json:"pageObjectIds,omitempty"`
+}
+
+// SlidesTextMatch is the text a replacement looks for.
+type SlidesTextMatch struct {
+	Text      string `json:"text"`
+	MatchCase bool   `json:"matchCase"`
+}
+
+// ReplaceShapesWithChartRequest turns every shape whose text matches into a chart from a
+// spreadsheet — the same idea as replacing shapes with a picture, with a live chart.
+type ReplaceShapesWithChartRequest struct {
+	ContainsText  *SlidesTextMatch `json:"containsText"`
+	SpreadsheetID string           `json:"spreadsheetId"`
+	ChartID       int              `json:"chartId"`
+	LinkingMode   string           `json:"linkingMode,omitempty"`
+	PageObjectIDs []string         `json:"pageObjectIds,omitempty"`
+}
+
+// UpdateAltTextRequest gives an element the description a screen reader reads out.
+type UpdateAltTextRequest struct {
+	ObjectID    string `json:"objectId"`
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// RerouteLineRequest makes a connector find its way between the shapes it is attached to
+// again, after they have been moved.
+type RerouteLineRequest struct {
+	ObjectID string `json:"objectId"`
+}
+
+// UpdateLineCategoryRequest changes how a connector runs: straight, bent or curved.
+type UpdateLineCategoryRequest struct {
+	ObjectID     string `json:"objectId"`
+	LineCategory string `json:"lineCategory"`
+}
+
+// CreateSheetsChartRequest puts a chart from a spreadsheet onto a slide.
+//
+// Linked, it keeps a thread back to the workbook and can be refreshed when the numbers
+// change; not linked, it is a picture of the chart as it was.
+type CreateSheetsChartRequest struct {
+	ObjectID      string             `json:"objectId,omitempty"`
+	SpreadsheetID string             `json:"spreadsheetId"`
+	ChartID       int                `json:"chartId"`
+	LinkingMode   string             `json:"linkingMode,omitempty"`
+	Element       *ElementProperties `json:"elementProperties,omitempty"`
+}
+
+// RefreshSheetsChartRequest pulls the current state of a linked chart.
+type RefreshSheetsChartRequest struct {
+	ObjectID string `json:"objectId"`
+}
+
+// CreateVideoRequest puts a video on a slide.
+type CreateVideoRequest struct {
+	ObjectID string             `json:"objectId,omitempty"`
+	ID       string             `json:"id"`
+	Source   string             `json:"source,omitempty"`
+	Element  *ElementProperties `json:"elementProperties,omitempty"`
+}
+
+// VideoProperties is how a video behaves and looks.
+type VideoProperties struct {
+	Outline  *Outline `json:"outline,omitempty"`
+	AutoPlay *bool    `json:"autoPlay,omitempty"`
+	Start    *int     `json:"start,omitempty"`
+	End      *int     `json:"end,omitempty"`
+	Mute     *bool    `json:"mute,omitempty"`
+}
+
+// UpdateVideoPropertiesRequest sets how a video plays.
+type UpdateVideoPropertiesRequest struct {
+	ObjectID   string           `json:"objectId"`
+	Properties *VideoProperties `json:"videoProperties"`
+	Fields     string           `json:"fields"`
 }
 
 // DuplicateObjectRequest copies an element or a whole slide within one presentation.

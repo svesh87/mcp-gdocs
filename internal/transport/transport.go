@@ -27,10 +27,10 @@ func ServeStdio(mcpServer *server.MCPServer) error {
 // ServeHTTP starts the streamable HTTP transport on address, behind bearer auth. Extra
 // handlers are mounted beside it — the sign-in pages, which a browser reaches and which
 // therefore cannot carry an Authorization header.
-func ServeHTTP(mcpServer *server.MCPServer, address, token string, extra map[string]http.Handler) error {
+func ServeHTTP(servers map[string]*server.MCPServer, address, token string, extra map[string]http.Handler) error {
 	httpServer := &http.Server{
 		Addr:    address,
-		Handler: NewHandler(mcpServer, token, extra),
+		Handler: NewHandler(servers, token, extra),
 		// Only the header deadline is set. Read and write deadlines would cut off the
 		// long-lived SSE streams this transport is built on.
 		ReadHeaderTimeout: 10 * time.Second,
@@ -39,8 +39,17 @@ func ServeHTTP(mcpServer *server.MCPServer, address, token string, extra map[str
 	return httpServer.ListenAndServe()
 }
 
-// NewHandler wires the MCP endpoint behind bearer auth and adds the health endpoint.
-func NewHandler(mcpServer *server.MCPServer, token string, extra map[string]http.Handler) http.Handler {
+// NewHandler wires the MCP endpoints behind bearer auth and adds the health endpoint.
+//
+// There is more than one endpoint because one process serves several sets of tools: /mcp
+// is everything the configuration allows, and /mcp/slides, /mcp/sheets and the rest are
+// the same process narrowed to one family. A project that needs slides connects to the
+// slides path and never sees the other ninety tool descriptions — which is the whole point,
+// since every name in the listing costs the agent context on every session.
+//
+// The sign-in, the token and the token store are shared: it is one server, seen through
+// several windows.
+func NewHandler(servers map[string]*server.MCPServer, token string, extra map[string]http.Handler) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc(HealthPath, func(w http.ResponseWriter, _ *http.Request) {
@@ -52,7 +61,13 @@ func NewHandler(mcpServer *server.MCPServer, token string, extra map[string]http
 		mux.Handle(path, handler)
 	}
 
-	mux.Handle(MCPPath, RequireBearer(server.NewStreamableHTTPServer(mcpServer), token))
+	for path, mcpServer := range servers {
+		// The streamable transport is told its own path: it builds the session
+		// endpoints from it, and a server mounted at /mcp/docs that believes it lives
+		// at /mcp hands the client an address that answers something else.
+		endpoint := server.NewStreamableHTTPServer(mcpServer, server.WithEndpointPath(path))
+		mux.Handle(path, RequireBearer(endpoint, token))
+	}
 
 	return mux
 }

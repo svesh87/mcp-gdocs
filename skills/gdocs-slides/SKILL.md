@@ -82,7 +82,7 @@ avoids rework:
 Two slides side by side hide exactly the differences that matter: a paragraph four points
 low, a font that fell back a weight, a box shifted by its own padding.
 
-Render both decks at the same size — `gdocs_export_slide_images` with the same `size` for
+Render both decks at the same size — `gdocs_slides_export_images` with the same `size` for
 each — and compare the images pixel for pixel. Any comparison will do as long as it reports
 the share of differing pixels per slide and can draw where they are. Work worst-slide
 first, and re-render after every change: fixing one field uncovers the next.
@@ -106,7 +106,7 @@ matches every reported number still looks wrong. The routine:
    "invalid argument" naming nothing.
 2. **Measure the render.** Where does the ink start, how wide is the line, how far apart
    are the baselines. That turns "looks off" into a number.
-3. **Export the deck and read it.** `gdocs_export_file` in `pptx` or `odp` gives a zip of
+3. **Export the deck and read it.** `gdocs_drive_export_file` in `pptx` or `odp` gives a zip of
    XML that shows what the API hides — `<a:bodyPr lIns=…>`, `<a:buSzPts>`,
    `<a:normAutofit fontScale=…>`. If the two decks differ there, you have found it. If they
    agree and the renders still differ, the property is outside both, and that is worth

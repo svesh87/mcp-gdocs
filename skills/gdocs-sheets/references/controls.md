@@ -2,6 +2,11 @@
 
 Arranged by what it changes. Every line is a pair: what reports it, what writes it.
 
+**A tool that is missing was switched off, not forgotten.** The server is started with a
+set of groups — `sheets-read`, `sheets-write`, `sheets-delete` — and removal is never in
+the default set. A name absent from the listing is the configuration talking; do what can
+be done and say what could not.
+
 **Units.** Widths and heights are in **pixels** — the number the interface shows. Colours
 go in as `#RRGGBB` or `{"red": 0..1, "green": 0..1, "blue": 0..1}`, and always come back as
 `#RRGGBB`. Rows and columns are counted from 0, and the end of a range is exclusive: one
@@ -133,27 +138,69 @@ names the series or is drawn as data.
 
 The chart reads the cells rather than a copy of them, so it follows the numbers.
 
+`gdocs_sheets_update_chart` changes one that exists: where it sits, how big it is, its
+frame, its titles. Changing beats recreating — a chart made again loses its place on the
+tab and every reference to it from a slide.
+
 ## Tables
 
 `gdocs_sheets_add_table` turns a rectangle into one of Sheets' tables: a named block whose
 columns have types — `TEXT`, `DOUBLE`, `CURRENCY`, `PERCENT`, `DATE`, `TIME`, `DATE_TIME`,
 `BOOLEAN`, `DROPDOWN`. A `DROPDOWN` column with `values` is the modern chip-style list, and
 the table's own banding follows rows added to it. Neither is reachable by formatting cells.
+Given a `table_id` the same tool changes the table instead of making another one.
+
+## Moving values about
+
+Writing a rectangle cell by cell keeps the values and loses everything else — the
+formatting, the validation, the notes, the rules that paint by content. These carry exactly
+what they are told to.
+
+| What | Tool | Notes |
+|---|---|---|
+| copy or move a rectangle | `gdocs_sheets_move_range` | `what` picks what travels: NORMAL, VALUES, FORMAT, FORMULA, DATA_VALIDATION, CONDITIONAL_FORMATTING. A copy repeats itself to fill a larger destination |
+| paste delimited text or an HTML table | `gdocs_sheets_paste_text` | the splitting happens on Google's side |
+| insert cells and push the rest aside | `gdocs_sheets_shape_range` (`insert_cells`) | not the same as inserting rows: only the rectangle's own columns move |
+| shuffle rows | `gdocs_sheets_shape_range` (`randomize`) | |
+| add rows after the last filled one | `gdocs_sheets_append_rows` | a string beginning with `=` goes in as a formula |
+
+## Views, slicers and labels
+
+| What | Read with | Write with |
+|---|---|---|
+| a saved view of a filter, private to whoever opens it | `gdocs_sheets_read_format` reports the tab's own filter | `gdocs_sheets_filter_view` — with an id it changes one, with `duplicate` it copies one |
+| a slicer, the control a reader clicks | `gdocs_sheets_info` counts them | `gdocs_sheets_slicer` |
+| labels that move with the row they are on | `gdocs_sheets_list_metadata` | `gdocs_sheets_set_metadata` |
+
+A filter hides rows for everyone in the workbook; a filter view only for whoever opens it.
+A label is the one way of remembering "the totals are on this row" that survives somebody
+inserting a line above it — a row number does not.
+
+## Removal
+
+`gdocs_sheets_delete` takes out one thing per call: `rows`, `columns`, `cells` (with the
+rest shifted up or left), `tab`, `group`, `banding`, `conditional_format`, `protection`,
+`named_range`, `filter_view`, `duplicates`, `chart`, `table`, `metadata`.
+
+It exists because building is not one-shot, and it is off unless the server was started
+with `sheets-delete`. There is no undo: take the indexes from a reading made after the last
+edit. Two of the targets leave the values alone and remove only the wrapper — `named_range`
+and `table` — and the answer says so.
 
 ## Files
 
 | What | Tool |
 |---|---|
-| export a workbook to pdf, xlsx, ods, csv | `gdocs_export_file` |
+| export a workbook to pdf, xlsx, ods, csv | `gdocs_drive_export_file` |
 | find a workbook by name | `gdocs_drive_search` |
 | copy a whole workbook as a starting point | `gdocs_drive_copy` |
+| put a workbook in the bin | `gdocs_drive_delete_to_trash`, only with `drive-delete` |
 
 ## What these tools do not do
 
-- **Delete.** No row, no column, no tab, no file, no values. A grid that has to get smaller
-  is a grid that should have been created smaller.
+- **Delete a file outright.** A workbook goes as far as the bin and no further; nothing
+  here empties it.
 - **Take arbitrary API requests.** Every tool builds its own.
 - **Copy anything from one workbook into another.** The API can copy a tab across, and this
   server does not: what it writes has to be something a caller decided and could name.
-- **Write charts back from a reading, slicers, or data-source blocks.**
-  `gdocs_sheets_info` counts them so their absence in a copy can be named.
+- **Reach a data source.** The five BigQuery requests are deliberately absent.

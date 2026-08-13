@@ -83,6 +83,9 @@ func (r *registry) registerSheetsData(srv *server.MCPServer) {
 		mcp.WithString("header_color", mcp.Description("Colour of the heading row, as #RRGGBB.")),
 		mcp.WithString("first_band_color", mcp.Description("Colour of the odd rows.")),
 		mcp.WithString("second_band_color", mcp.Description("Colour of the even rows.")),
+		mcp.WithString("table_id", mcp.Description(
+			"Change the table with this identifier instead of making a new one: its name, what it "+
+				"covers, its column types.")),
 	), r.sheetsAddTable)
 
 	srv.AddTool(mcp.NewTool("gdocs_sheets_find_replace",
@@ -413,20 +416,37 @@ func (r *registry) sheetsAddTable(ctx context.Context, req mcp.CallToolRequest) 
 		return toolError(err), nil
 	}
 
-	if _, err := client.SheetsBatchUpdate(ctx, spreadsheetID, []google.SheetsRequest{{
-		AddTable: &google.AddTableRequest{Table: google.SheetsTable{
-			Name:             name,
-			Range:            gridRangeOf(sheetID, bounds),
-			ColumnProperties: columns,
-			RowsProperties:   rows,
-		}},
-	}}); err != nil {
+	table := google.SheetsTable{
+		Name:             name,
+		Range:            gridRangeOf(sheetID, bounds),
+		ColumnProperties: columns,
+		RowsProperties:   rows,
+	}
+
+	// With an identifier this changes the table that is there — its name, what it covers,
+	// its column types — rather than laying a second table over the same cells, which
+	// Sheets refuses anyway.
+	request := google.SheetsRequest{AddTable: &google.AddTableRequest{Table: table}}
+	if id := optionalString(req, "table_id"); id != "" {
+		table.TableID = id
+		fields := "name,range"
+		if len(columns) > 0 {
+			fields += ",columnProperties"
+		}
+		if rows != nil {
+			fields += ",rowsProperties"
+		}
+		request = google.SheetsRequest{UpdateTable: &google.UpdateTableRequest{Table: table, Fields: fields}}
+	}
+
+	if _, err := client.SheetsBatchUpdate(ctx, spreadsheetID, []google.SheetsRequest{request}); err != nil {
 		return toolError(err), nil
 	}
 
 	return resultJSON(map[string]any{
 		"spreadsheet_id": spreadsheetID, "sheet_title": sheetTitle, "sheet_id": sheetID,
 		"name": name, "columns": len(columns),
+		"changed": optionalString(req, "table_id") != "",
 	})
 }
 

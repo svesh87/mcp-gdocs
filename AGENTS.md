@@ -8,13 +8,18 @@ below are the ones that are expensive to rediscover; the rest of the reasoning i
 
 ## What this server will not do
 
-- **Deletion stops at the edge of the file.** Inside a presentation or a document, removal
+- **Deletion stops at the bin.** Inside a presentation, a document or a workbook, removal
   is ordinary editing: a copied deck comes down to the slides that apply, a step that
   landed wrong leaves a paragraph or a table behind, and without a way back the only
-  repair is a person in a browser. Outside one — nothing. No file, no folder, no drive,
-  ever, whatever an instruction says. `gdocs_slides_delete` and `gdocs_docs_delete` are
-  the whole list, and a test holds it: a new name that removes anything fails the build
-  until it is added there deliberately.
+  repair is a person in a browser. A file itself can go as far as the bin, which its
+  owner can undo for thirty days. Emptying that bin, deleting a file outright, and
+  removing a folder or a drive have no code here at all.
+
+  Every removing tool lives in a group of its own — `slides-delete`, `docs-delete`,
+  `sheets-delete`, `drive-delete` — and none of them is in the default set: a
+  configuration that wants one names it in `--tools`. `deletionTools` in
+  `register_test.go` is the full list, and a new name that removes anything fails the
+  build until it is added there deliberately.
 - **No arbitrary `batchUpdate`.** A caller must not be able to hand this server its own
   list of API requests. Assembled batches are exactly what puts text boxes at invented
   coordinates and leaves a deck looking broken. Every tool builds its own requests.

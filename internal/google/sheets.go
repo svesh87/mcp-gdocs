@@ -10,11 +10,12 @@ import (
 
 // Spreadsheet is a workbook as far as this server reads it.
 type Spreadsheet struct {
-	SpreadsheetID  string                `json:"spreadsheetId"`
-	Properties     SpreadsheetProperties `json:"properties"`
-	Sheets         []Sheet               `json:"sheets"`
-	NamedRanges    []NamedRange          `json:"namedRanges,omitempty"`
-	SpreadsheetURL string                `json:"spreadsheetUrl,omitempty"`
+	SpreadsheetID     string                `json:"spreadsheetId"`
+	Properties        SpreadsheetProperties `json:"properties"`
+	Sheets            []Sheet               `json:"sheets"`
+	NamedRanges       []NamedRange          `json:"namedRanges,omitempty"`
+	SpreadsheetURL    string                `json:"spreadsheetUrl,omitempty"`
+	DeveloperMetadata []DeveloperMetadata   `json:"developerMetadata,omitempty"`
 }
 
 // SpreadsheetProperties is the workbook's own settings.
@@ -44,6 +45,10 @@ type Sheet struct {
 	Charts  []json.RawMessage `json:"charts,omitempty"`
 	Slicers []json.RawMessage `json:"slicers,omitempty"`
 	Tables  []json.RawMessage `json:"tables,omitempty"`
+	// DeveloperMetadata is the labels attached to this tab, or to rows and columns of it.
+	// They travel with what they are attached to, which is what makes them worth reading
+	// before an edit that shifts anything.
+	DeveloperMetadata []DeveloperMetadata `json:"developerMetadata,omitempty"`
 }
 
 // ConditionalFormat is a rule that colours cells by what is in them.
@@ -434,6 +439,305 @@ type SheetsRequest struct {
 	AddChart         *AddChartRequest             `json:"addChart,omitempty"`
 	AddTable         *AddTableRequest             `json:"addTable,omitempty"`
 	UpdateGroup      *UpdateDimensionGroupRequest `json:"updateDimensionGroup,omitempty"`
+
+	// Removal inside a workbook. Every one of these takes something out that a person
+	// could take out in the editor, and none of them touches the file itself.
+	DeleteSheet       *DeleteSheetRequest       `json:"deleteSheet,omitempty"`
+	DeleteDimension   *DeleteDimensionRequest   `json:"deleteDimension,omitempty"`
+	DeleteRange       *DeleteRangeRequest       `json:"deleteRange,omitempty"`
+	DeleteGroup       *DeleteDimensionGroupReq  `json:"deleteDimensionGroup,omitempty"`
+	DeleteBanding     *DeleteBandingRequest     `json:"deleteBanding,omitempty"`
+	DeleteConditional *DeleteConditionalRequest `json:"deleteConditionalFormatRule,omitempty"`
+	DeleteProtected   *DeleteProtectedRequest   `json:"deleteProtectedRange,omitempty"`
+	DeleteNamedRange  *DeleteNamedRangeRequest  `json:"deleteNamedRange,omitempty"`
+	DeleteFilterView  *DeleteFilterViewRequest  `json:"deleteFilterView,omitempty"`
+	DeleteDuplicates  *DeleteDuplicatesRequest  `json:"deleteDuplicates,omitempty"`
+	DeleteEmbedded    *DeleteEmbeddedRequest    `json:"deleteEmbeddedObject,omitempty"`
+	DeleteTable       *DeleteTableRequest       `json:"deleteTable,omitempty"`
+	DeleteMetadata    *DeleteMetadataRequest    `json:"deleteDeveloperMetadata,omitempty"`
+
+	// Moving values about, and the rest of what a workbook can be told to do.
+	InsertRange     *InsertRangeRequest      `json:"insertRange,omitempty"`
+	CopyPaste       *CopyPasteRequest        `json:"copyPaste,omitempty"`
+	CutPaste        *CutPasteRequest         `json:"cutPaste,omitempty"`
+	PasteData       *PasteDataRequest        `json:"pasteData,omitempty"`
+	AppendCells     *AppendCellsRequest      `json:"appendCells,omitempty"`
+	RandomizeRange  *RandomizeRangeRequest   `json:"randomizeRange,omitempty"`
+	UpdateChartSpec *UpdateChartSpecRequest  `json:"updateChartSpec,omitempty"`
+	UpdateEmbedded  *UpdateEmbeddedPosReq    `json:"updateEmbeddedObjectPosition,omitempty"`
+	UpdateEmbBorder *UpdateEmbeddedBorderReq `json:"updateEmbeddedObjectBorder,omitempty"`
+	AddFilterView   *AddFilterViewRequest    `json:"addFilterView,omitempty"`
+	UpdateFilterVw  *UpdateFilterViewRequest `json:"updateFilterView,omitempty"`
+	DuplicateFilter *DuplicateFilterRequest  `json:"duplicateFilterView,omitempty"`
+	AddSlicer       *AddSlicerRequest        `json:"addSlicer,omitempty"`
+	UpdateSlicer    *UpdateSlicerRequest     `json:"updateSlicerSpec,omitempty"`
+	UpdateNamedRnge *UpdateNamedRangeRequest `json:"updateNamedRange,omitempty"`
+	UpdateProtected *UpdateProtectedRequest  `json:"updateProtectedRange,omitempty"`
+	UpdateTable     *UpdateTableRequest      `json:"updateTable,omitempty"`
+	CreateMetadata  *CreateMetadataRequest   `json:"createDeveloperMetadata,omitempty"`
+	UpdateMetadata  *UpdateMetadataRequest   `json:"updateDeveloperMetadata,omitempty"`
+}
+
+// DeleteSheetRequest removes a tab and everything on it.
+type DeleteSheetRequest struct {
+	SheetID int `json:"sheetId"`
+}
+
+// DeleteDimensionRequest removes rows or columns; what is below or to the right moves up.
+type DeleteDimensionRequest struct {
+	Range DimensionRange `json:"range"`
+}
+
+// DeleteRangeRequest removes cells and pulls the rest along in one direction.
+type DeleteRangeRequest struct {
+	Range          GridRange `json:"range"`
+	ShiftDimension string    `json:"shiftDimension"`
+}
+
+// DeleteDimensionGroupReq removes one level of grouping. The rows stay.
+type DeleteDimensionGroupReq struct {
+	Range DimensionRange `json:"range"`
+}
+
+// DeleteBandingRequest removes the alternating colours.
+type DeleteBandingRequest struct {
+	BandedRangeID int `json:"bandedRangeId"`
+}
+
+// DeleteConditionalRequest removes one rule that paints by content.
+type DeleteConditionalRequest struct {
+	SheetID int `json:"sheetId"`
+	Index   int `json:"index"`
+}
+
+// DeleteProtectedRequest lifts the protection off a range.
+type DeleteProtectedRequest struct {
+	ProtectedRangeID int `json:"protectedRangeId"`
+}
+
+// DeleteNamedRangeRequest forgets a name. The cells it covered stay.
+type DeleteNamedRangeRequest struct {
+	NamedRangeID string `json:"namedRangeId"`
+}
+
+// DeleteFilterViewRequest removes a saved view of a filter.
+type DeleteFilterViewRequest struct {
+	FilterID int `json:"filterId"`
+}
+
+// DeleteDuplicatesRequest removes repeated rows, comparing the columns it is told to.
+type DeleteDuplicatesRequest struct {
+	Range             GridRange        `json:"range"`
+	ComparisonColumns []DimensionRange `json:"comparisonColumns,omitempty"`
+}
+
+// DeleteEmbeddedRequest removes a chart or a slicer from a tab.
+type DeleteEmbeddedRequest struct {
+	ObjectID int `json:"objectId"`
+}
+
+// DeleteTableRequest removes a table object. The values in the cells stay where they are.
+type DeleteTableRequest struct {
+	TableID string `json:"tableId"`
+}
+
+// DeleteMetadataRequest removes developer metadata matching a filter.
+type DeleteMetadataRequest struct {
+	Filter DeveloperMetadataFilter `json:"dataFilter"`
+}
+
+// InsertRangeRequest makes room by pushing cells aside.
+type InsertRangeRequest struct {
+	Range          GridRange `json:"range"`
+	ShiftDimension string    `json:"shiftDimension"`
+}
+
+// CopyPasteRequest copies a rectangle onto another, values, formatting or both.
+type CopyPasteRequest struct {
+	Source      GridRange `json:"source"`
+	Destination GridRange `json:"destination"`
+	PasteType   string    `json:"pasteType,omitempty"`
+	PasteOrient string    `json:"pasteOrientation,omitempty"`
+}
+
+// CutPasteRequest moves a rectangle, leaving nothing behind.
+type CutPasteRequest struct {
+	Source      GridRange `json:"source"`
+	Destination GridCoord `json:"destination"`
+	PasteType   string    `json:"pasteType,omitempty"`
+}
+
+// PasteDataRequest puts delimited text into a sheet as if it had been pasted.
+type PasteDataRequest struct {
+	Coordinate GridCoord `json:"coordinate"`
+	Data       string    `json:"data"`
+	Type       string    `json:"type,omitempty"`
+	Delimiter  string    `json:"delimiter,omitempty"`
+	HTML       bool      `json:"html,omitempty"`
+}
+
+// AppendCellsRequest adds rows after the last one that has anything in it.
+type AppendCellsRequest struct {
+	SheetID int       `json:"sheetId"`
+	Rows    []RowData `json:"rows"`
+	Fields  string    `json:"fields"`
+}
+
+// RandomizeRangeRequest shuffles the rows of a rectangle.
+type RandomizeRangeRequest struct {
+	Range GridRange `json:"range"`
+}
+
+// UpdateChartSpecRequest changes a chart without making a new one, so it keeps its place
+// and its size.
+type UpdateChartSpecRequest struct {
+	ChartID int        `json:"chartId"`
+	Spec    *ChartSpec `json:"spec"`
+}
+
+// UpdateEmbeddedPosReq moves a chart or a slicer.
+type UpdateEmbeddedPosReq struct {
+	ObjectID    int             `json:"objectId"`
+	NewPosition *EmbeddedObjPos `json:"newPosition"`
+	Fields      string          `json:"fields"`
+}
+
+// EmbeddedObjPos is where a chart or slicer sits.
+type EmbeddedObjPos struct {
+	SheetID         int              `json:"sheetId,omitempty"`
+	OverlayPosition *OverlayPosition `json:"overlayPosition,omitempty"`
+	NewSheet        bool             `json:"newSheet,omitempty"`
+}
+
+// UpdateEmbeddedBorderReq draws the frame around a chart or a slicer.
+type UpdateEmbeddedBorderReq struct {
+	ObjectID int          `json:"objectId"`
+	Border   *EmbedBorder `json:"border"`
+	Fields   string       `json:"fields"`
+}
+
+// EmbedBorder is that frame.
+type EmbedBorder struct {
+	Color *ColorStyle `json:"colorStyle,omitempty"`
+}
+
+// AddFilterViewRequest saves a way of looking at a range — its own filter and sort, which
+// nobody else's screen is changed by.
+type AddFilterViewRequest struct {
+	Filter FilterView `json:"filter"`
+}
+
+// UpdateFilterViewRequest changes one.
+type UpdateFilterViewRequest struct {
+	Filter FilterView `json:"filter"`
+	Fields string     `json:"fields"`
+}
+
+// DuplicateFilterRequest copies one, which is how a variant is made without losing the
+// original.
+type DuplicateFilterRequest struct {
+	FilterID int `json:"filterId"`
+}
+
+// SlicerSpec is a control on a sheet that filters a range by one column.
+type SlicerSpec struct {
+	DataRange            *GridRange      `json:"dataRange,omitempty"`
+	FilterCriteria       *FilterCriteria `json:"filterCriteria,omitempty"`
+	ColumnIndex          *int            `json:"columnIndex,omitempty"`
+	ApplyToPivotTables   *bool           `json:"applyToPivotTables,omitempty"`
+	Title                string          `json:"title,omitempty"`
+	TextFormat           *SheetsText     `json:"textFormat,omitempty"`
+	BackgroundColorStyle *ColorStyle     `json:"backgroundColorStyle,omitempty"`
+	HorizontalAlignment  string          `json:"horizontalAlignment,omitempty"`
+}
+
+// Slicer is that control with its position.
+type Slicer struct {
+	SlicerID int             `json:"slicerId,omitempty"`
+	Spec     *SlicerSpec     `json:"spec,omitempty"`
+	Position *EmbeddedObjPos `json:"position,omitempty"`
+}
+
+// AddSlicerRequest puts one on a sheet.
+type AddSlicerRequest struct {
+	Slicer Slicer `json:"slicer"`
+}
+
+// UpdateSlicerRequest changes one.
+type UpdateSlicerRequest struct {
+	SlicerID int         `json:"slicerId"`
+	Spec     *SlicerSpec `json:"spec"`
+	Fields   string      `json:"fields"`
+}
+
+// UpdateNamedRangeRequest moves or renames a named range rather than replacing it.
+type UpdateNamedRangeRequest struct {
+	NamedRange NamedRange `json:"namedRange"`
+	Fields     string     `json:"fields"`
+}
+
+// UpdateProtectedRequest changes who may edit a protected range.
+type UpdateProtectedRequest struct {
+	ProtectedRange ProtectedRangeSpec `json:"protectedRange"`
+	Fields         string             `json:"fields"`
+}
+
+// ProtectedRangeSpec is a protection as it is written.
+type ProtectedRangeSpec struct {
+	ProtectedRangeID int        `json:"protectedRangeId,omitempty"`
+	Range            *GridRange `json:"range,omitempty"`
+	Description      string     `json:"description,omitempty"`
+	WarningOnly      *bool      `json:"warningOnly,omitempty"`
+	Editors          *Editors   `json:"editors,omitempty"`
+}
+
+// UpdateTableRequest changes a table object: its name, its range, its column types.
+type UpdateTableRequest struct {
+	Table  SheetsTable `json:"table"`
+	Fields string      `json:"fields"`
+}
+
+// DeveloperMetadataFilter picks metadata by identifier or by key.
+type DeveloperMetadataFilter struct {
+	DeveloperMetadataLookup *MetadataLookup `json:"developerMetadataLookup,omitempty"`
+}
+
+// MetadataLookup is how metadata is found.
+type MetadataLookup struct {
+	MetadataID    int    `json:"metadataId,omitempty"`
+	MetadataKey   string `json:"metadataKey,omitempty"`
+	MetadataValue string `json:"metadataValue,omitempty"`
+	LocationType  string `json:"locationType,omitempty"`
+	Visibility    string `json:"visibility,omitempty"`
+}
+
+// DeveloperMetadata is a label attached to a row, a column or a sheet that survives the
+// rows moving — which is what makes it different from remembering a row number.
+type DeveloperMetadata struct {
+	MetadataID    int               `json:"metadataId,omitempty"`
+	MetadataKey   string            `json:"metadataKey,omitempty"`
+	MetadataValue string            `json:"metadataValue,omitempty"`
+	Location      *MetadataLocation `json:"location,omitempty"`
+	Visibility    string            `json:"visibility,omitempty"`
+}
+
+// MetadataLocation is what a piece of metadata is attached to.
+type MetadataLocation struct {
+	SheetID       int             `json:"sheetId,omitempty"`
+	Spreadsheet   bool            `json:"spreadsheet,omitempty"`
+	DimensionRnge *DimensionRange `json:"dimensionRange,omitempty"`
+}
+
+// CreateMetadataRequest attaches one.
+type CreateMetadataRequest struct {
+	DeveloperMetadata DeveloperMetadata `json:"developerMetadata"`
+}
+
+// UpdateMetadataRequest changes the ones a filter finds.
+type UpdateMetadataRequest struct {
+	DataFilters       []DeveloperMetadataFilter `json:"dataFilters"`
+	DeveloperMetadata DeveloperMetadata         `json:"developerMetadata"`
+	Fields            string                    `json:"fields"`
 }
 
 // UnmergeCellsRequest takes a merge apart. The cells come back; nothing is removed.
@@ -577,6 +881,7 @@ type AddTableRequest struct {
 // SheetsTable is a rectangle with a name and typed columns. Slides has a Table of its own,
 // which is a different thing entirely: this one is a block of a spreadsheet.
 type SheetsTable struct {
+	TableID          string               `json:"tableId,omitempty"`
 	Name             string               `json:"name,omitempty"`
 	Range            GridRange            `json:"range"`
 	ColumnProperties []SheetsTableColumn  `json:"columnProperties,omitempty"`

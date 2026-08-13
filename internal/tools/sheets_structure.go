@@ -149,6 +149,9 @@ func (r *registry) registerSheetsStructure(srv *server.MCPServer) {
 			"Warn and let the edit through. Off means only the named editors may change it.")),
 		mcp.WithArray("editors", mcp.WithStringItems(), mcp.Description(
 			"Addresses allowed to edit when warning_only is off.")),
+		mcp.WithNumber("protected_range_id", mcp.Description(
+			"Change the protection with this identifier instead of adding another one. Without it a "+
+				"second protection is laid over the same cells, and the older one keeps applying.")),
 	), r.sheetsProtectRange)
 
 	srv.AddTool(mcp.NewTool("gdocs_sheets_add_named_range",
@@ -161,6 +164,9 @@ func (r *registry) registerSheetsStructure(srv *server.MCPServer) {
 		mcp.WithNumber("end_row", mcp.Required(), mcp.Description("Row to stop before.")),
 		mcp.WithNumber("start_column", mcp.Required(), mcp.Description("First column, counting from 0.")),
 		mcp.WithNumber("end_column", mcp.Required(), mcp.Description("Column to stop before.")),
+		mcp.WithString("named_range_id", mcp.Description(
+			"Move or rename the range with this identifier instead of adding another one. Two ranges "+
+				"under one name is what happens otherwise, and formulas then follow the older one.")),
 	), r.sheetsAddNamedRange)
 
 	srv.AddTool(mcp.NewTool("gdocs_sheets_group_dimensions",
@@ -805,15 +811,34 @@ func (r *registry) sheetsProtectRange(ctx context.Context, req mcp.CallToolReque
 		protected.Editors = &google.Editors{Users: editors}
 	}
 
-	if _, err := client.SheetsBatchUpdate(ctx, spreadsheetID, []google.SheetsRequest{{
+	// With an identifier this changes the protection that is already there — who may edit
+	// it, what it covers — instead of laying a second one over the same cells.
+	request := google.SheetsRequest{
 		AddProtected: &google.AddProtectedRangeRequest{ProtectedRange: protected},
-	}}); err != nil {
+	}
+	if id := req.GetInt("protected_range_id", 0); id > 0 {
+		spec := google.ProtectedRangeSpec{
+			ProtectedRangeID: id,
+			Range:            protected.Range,
+			Description:      protected.Description,
+			WarningOnly:      &warningOnly,
+			Editors:          protected.Editors,
+		}
+		request = google.SheetsRequest{
+			UpdateProtected: &google.UpdateProtectedRequest{
+				ProtectedRange: spec, Fields: "range,description,warningOnly,editors",
+			},
+		}
+	}
+
+	if _, err := client.SheetsBatchUpdate(ctx, spreadsheetID, []google.SheetsRequest{request}); err != nil {
 		return toolError(err), nil
 	}
 
 	return resultJSON(map[string]any{
 		"spreadsheet_id": spreadsheetID, "sheet_title": sheetTitle, "sheet_id": sheetID,
 		"whole_tab": !named, "warning_only": warningOnly,
+		"changed": req.GetInt("protected_range_id", 0) > 0,
 	})
 }
 
@@ -844,15 +869,26 @@ func (r *registry) sheetsAddNamedRange(ctx context.Context, req mcp.CallToolRequ
 		return toolError(err), nil
 	}
 
-	if _, err := client.SheetsBatchUpdate(ctx, spreadsheetID, []google.SheetsRequest{{
-		AddNamedRange: &google.AddNamedRangeRequest{NamedRange: google.NamedRange{
-			Name: name, Range: gridRangeOf(sheetID, bounds)}},
-	}}); err != nil {
+	named := google.NamedRange{Name: name, Range: gridRangeOf(sheetID, bounds)}
+
+	// With an identifier this moves or renames the range that is already there rather
+	// than adding a second one under the same name, which is what Sheets would otherwise
+	// end up with — two names, one of them stale.
+	request := google.SheetsRequest{AddNamedRange: &google.AddNamedRangeRequest{NamedRange: named}}
+	if id := optionalString(req, "named_range_id"); id != "" {
+		named.NamedRangeID = id
+		request = google.SheetsRequest{
+			UpdateNamedRnge: &google.UpdateNamedRangeRequest{NamedRange: named, Fields: "name,range"},
+		}
+	}
+
+	if _, err := client.SheetsBatchUpdate(ctx, spreadsheetID, []google.SheetsRequest{request}); err != nil {
 		return toolError(err), nil
 	}
 
 	return resultJSON(map[string]any{
 		"spreadsheet_id": spreadsheetID, "sheet_title": sheetTitle, "name": name,
+		"changed": optionalString(req, "named_range_id") != "",
 	})
 }
 

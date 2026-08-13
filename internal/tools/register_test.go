@@ -167,6 +167,7 @@ func TestWritingToolsNeedAllowWrite(t *testing.T) {
 		"gdocs_slides_set_list",
 		"gdocs_slides_hide",
 		"gdocs_slides_create_table_with_text",
+		"gdocs_slides_create",
 		"gdocs_slides_copy_presentation",
 		"gdocs_slides_add_slide",
 		"gdocs_slides_set_text",

@@ -131,6 +131,7 @@
     "gdocs_slides_add_slide",
     "gdocs_slides_add_video",
     "gdocs_slides_copy_presentation",
+    "gdocs_slides_create",
     "gdocs_slides_create_line",
     "gdocs_slides_create_shape",
     "gdocs_slides_create_table_with_text",

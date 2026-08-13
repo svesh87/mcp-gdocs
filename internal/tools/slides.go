@@ -137,11 +137,20 @@ func (r *registry) registerSlides(srv *server.MCPServer) {
 		return
 	}
 
+	srv.AddTool(mcp.NewTool("gdocs_slides_create",
+		mcp.WithDescription("Create an empty presentation with a title. It arrives on Google's default "+
+			"theme, and no request brings another deck's theme into it: the look has to be built here, "+
+			"with gdocs_slides_set_theme_colors for the palette and gdocs_slides_style_layout for what "+
+			"the layouts and the master impose. To start from an existing deck's look instead of "+
+			"building one, copy that deck with gdocs_slides_copy_presentation."),
+		mcp.WithString("title", mcp.Required(), mcp.Description("Name of the new presentation.")),
+	), r.slidesCreate)
+
 	srv.AddTool(mcp.NewTool("gdocs_slides_copy_presentation",
 		mcp.WithDescription("Copy a presentation, which is how a new deck is started from a template: the copy "+
 			"keeps the master, the layouts, the fonts and the colours, so everything added afterwards "+
-			"inherits them. Building a deck from a blank presentation instead is what makes it look "+
-			"nothing like the rest."),
+			"inherits them. A deck made with gdocs_slides_create starts on the default theme instead, "+
+			"and looks nothing like the rest until that theme is built."),
 		mcp.WithString("template_id", mcp.Required(), mcp.Description("File identifier of the template presentation.")),
 		mcp.WithString("name", mcp.Required(), mcp.Description("Name for the new presentation.")),
 		mcp.WithString("parent_folder_id", mcp.Description("Folder to put it in. Without one it lands beside the template.")),
@@ -565,6 +574,30 @@ func (r *registry) slidesInspectTitleStyle(ctx context.Context, req mcp.CallTool
 	}
 
 	return resultJSON(payload)
+}
+
+// slidesCreate makes an empty deck. What comes back is the identifier every other slides
+// tool takes, so it is the only thing worth reporting besides the title.
+func (r *registry) slidesCreate(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	title, err := requiredString(req, "title")
+	if err != nil {
+		return toolError(err), nil
+	}
+
+	client, err := r.client(ctx)
+	if err != nil {
+		return toolError(err), nil
+	}
+
+	presentation, err := client.CreatePresentation(ctx, title)
+	if err != nil {
+		return toolError(err), nil
+	}
+
+	return resultJSON(map[string]any{
+		"presentation_id": presentation.PresentationID,
+		"title":           presentation.Title,
+	})
 }
 
 // slidesList maps a presentation: its slides and what is on each of them.

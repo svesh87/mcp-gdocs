@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -359,6 +360,57 @@ func TestInspectMissingObject(t *testing.T) {
 
 	if message := requireError(t, result, err); !strings.Contains(message, "no object nothing") {
 		t.Errorf("expected the refusal to name the object, got %q", message)
+	}
+}
+
+// TestSlidesCreate pins the request that makes an empty deck. The title is the whole body:
+// a presentation cannot be created with a theme, a page size or anything else, and a caller
+// that expects otherwise gets an empty deck and no error to say so.
+func TestSlidesCreate(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).
+		answer("/presentations", `{"presentationId": "new_deck", "title": "DevOPS Demo Template"}`))
+
+	answer := h.ok(h.registry.slidesCreate(context.Background(), request(map[string]any{
+		"title": "DevOPS Demo Template",
+	})))
+
+	if !strings.Contains(answer, "new_deck") {
+		t.Errorf("the new deck's identifier should come back, got %s", answer)
+	}
+
+	sent := h.google.requests[0]
+	if sent.Method != http.MethodPost || sent.Path != "/v1/presentations" {
+		t.Errorf("a deck is made by POST /v1/presentations, got %s %s", sent.Method, sent.Path)
+	}
+	if !strings.Contains(string(sent.Body), `"title":"DevOPS Demo Template"`) {
+		t.Errorf("the title should be the body of the request, got %s", sent.Body)
+	}
+}
+
+// TestSlidesCreateNeedsTitle keeps the refusal on this side of the API: without a name
+// Google makes an untitled deck, and an untitled deck on someone's Drive is litter.
+func TestSlidesCreateNeedsTitle(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t))
+
+	result, err := h.registry.slidesCreate(context.Background(), request(map[string]any{}))
+	if message := requireError(t, result, err); !strings.Contains(message, "title") {
+		t.Errorf("expected the refusal to name the missing title, got %q", message)
+	}
+}
+
+// TestSlidesCreateReportsRefusal keeps Google's own refusal visible. Creating a file is
+// where a quota or a policy on the account shows up, and a caller told only "failed" would
+// go looking for the fault in the deck it has not made yet.
+func TestSlidesCreateReportsRefusal(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).
+		fail("/presentations", http.StatusForbidden, `{"error": {"message": "quota exceeded"}}`))
+
+	message := h.fail(h.registry.slidesCreate(context.Background(), request(map[string]any{
+		"title": "DevOPS Demo Template",
+	})))
+
+	if !strings.Contains(message, "quota exceeded") {
+		t.Errorf("Google's own words should reach the caller, got %q", message)
 	}
 }
 

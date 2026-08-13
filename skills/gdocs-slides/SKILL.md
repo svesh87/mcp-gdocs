@@ -121,10 +121,14 @@ matches every reported number still looks wrong. The routine:
 
 ## What cannot be carried across at all
 
-- **The theme, the master and the layouts.** There is no "apply that deck's theme". Either
-  start from a copy of the template (`gdocs_slides_copy_presentation`), or have a person
-  import the theme by hand. Until then the deck sits on Google's default theme however
-  exact the content is.
+- **The theme, the master and the layouts.** There is no "apply that deck's theme". Three
+  ways out, and the choice decides the rest of the work: start from a copy of the template
+  (`gdocs_slides_copy_presentation`) and inherit everything; have a person import the theme
+  by hand; or make an empty deck (`gdocs_slides_create`) and build the look — the palette
+  with `set_theme_colors`, the sizes, fonts and colours with `style_layout` on each layout
+  and on the master. Until one of those, the deck sits on Google's default theme however
+  exact the content is. Building it is the only route that leaves every number named, and
+  the only one that produces a deck of its own rather than a descendant of someone else's.
 - **An element from another presentation, or even another slide.** No request moves one.
   A person can paste it in the browser; from there `gdocs_slides_duplicate` multiplies it
   on its own slide, keeping what the API cannot name.

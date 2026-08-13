@@ -1262,6 +1262,22 @@ func (c *Client) Presentation(ctx context.Context, presentationID, fields string
 	return &out, nil
 }
 
+// CreatePresentation makes an empty deck with a title.
+//
+// It arrives on Google's default theme, and no request moves another deck's theme into it:
+// the palette is written with a master colour scheme, the styles with the layouts. That is
+// the whole reason this exists beside a copy — a copy brings a theme and everything else
+// with it.
+func (c *Client) CreatePresentation(ctx context.Context, title string) (*Presentation, error) {
+	var out Presentation
+	if err := c.call(ctx, http.MethodPost, endpoint(c.slidesBase, "/presentations", nil),
+		map[string]string{"title": title}, &out); err != nil {
+		return nil, err
+	}
+
+	return &out, nil
+}
+
 // SlidesBatchUpdate sends one batch of requests to a presentation.
 func (c *Client) SlidesBatchUpdate(ctx context.Context, presentationID string, requests []Request) (*BatchUpdateResponse, error) {
 	var out BatchUpdateResponse

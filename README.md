@@ -132,6 +132,7 @@ Slides, the content of a deck:
 
 | Tool | What it does |
 |---|---|
+| `gdocs_slides_create` | an empty deck on the default theme, for a look built rather than inherited |
 | `gdocs_slides_copy_presentation` | start a deck from a template, keeping master, layouts and fonts |
 | `gdocs_slides_add_slide` | add a slide following one of the deck's own layouts |
 | `gdocs_slides_set_text` | replace a text box's text, styling left to the template |

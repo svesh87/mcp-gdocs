@@ -75,11 +75,16 @@ A text box over a coloured panel carries a solid fill of black at zero opacity.
 **Instead:** the reading marks it `transparent` — use `no_fill`.
 
 ### A theme colour name is not its value
-`ACCENT5` follows the theme; `#0097A7` stops following it.
+`ACCENT5` follows the theme; `#0097A7` stops following it. A colour is stored one way or the
+other and never both, so a fill, an outline or a line painted by name has **no value at all**
+— the reading carries `theme_color` and nothing else.
 
 **On the slide:** nothing at first, then a deck that stops changing colour when the theme
-does.
-**Instead:** write back `theme_color` when the reading gave a name.
+does. Worse on a border: read as a weight and a dash style with no colour, it gets rebuilt
+without one, and the panel loses its edge.
+**Instead:** write back `theme_color` when the reading gave a name —
+`fill_theme_color` and `outline_theme_color` on `style_shape`, `theme_color` inside
+`style_table`.
 
 ### Style lives inside the line
 "Итог:" bold with the rest of the sentence plain is one paragraph and two runs.
@@ -133,6 +138,29 @@ it, so the eye finds no way in.
 colour), then `scope=title` for the heading. On a panel copied from one of another colour,
 the inherited run colour is the giveaway — grey text in a red panel means the `all` pass was
 skipped.
+
+### Replacing the text throws the paragraphs' styling away
+`set_text` puts new words in the box and nothing else survives below the box's own level: a
+two-paragraph panel whose heading was 14 pt bold slate and whose caption was 12 pt grey comes
+back as two identical paragraphs. The box keeps its fill, its outline and its alignment, so
+the loss is easy to miss on a small render.
+
+**On the slide:** a caption the same size and colour as the heading above it, in a panel that
+looked right five minutes ago.
+**Instead:** read the box with `inspect_text_structure` before replacing anything, and set the
+paragraphs back afterwards by number — `scope=paragraph:0`, `paragraph:1` — with the values
+the reading reported. For a box that only needs different words in the same shape, edit the
+words, not the box.
+
+### Recreating a table because its shape has to change
+A copied slide brings a table of the size it had. The instinct is to delete it and build a new
+one with `create_table_with_text`, and that throws away every fill, every merge and every
+per-cell style the original carried, all of which then has to be set again.
+
+**On the slide:** a table that is the right size and the wrong colour, with the header row no
+longer bold.
+**Instead:** `gdocs_slides_edit_table` adds rows and columns beside a cell and takes merges
+apart. The size a table was created with is not final, and reshaping keeps the styling.
 
 ### Furniture put on the slide instead of the layout
 A band, a logo, a rule, a background: each one added to a slide is one that has to be added

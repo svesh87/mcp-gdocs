@@ -129,6 +129,51 @@ The palette holds twelve slots and a deck usually wants more roles than that, so
 mapping before painting: which accents carry the panel colours, which carries the heading,
 what stays a literal because it never changes with the season.
 
+### A series of decks that differ only in season
+
+A template that comes in twelve variants — one per month, one per event — is not twelve decks.
+It is one deck plus twelve palettes and twelve sets of background pictures, and it stays that
+way only if it is built that way from the start.
+
+The shape that works:
+
+1. **One base deck** holds the composition: every slide, every panel, every word of the
+   placeholder text, the grid, the speaker notes.
+2. **Everything the season touches is painted from the palette**, so a variant is
+   `set_theme_colors` plus the backgrounds and nothing else. See the section above for which
+   colours those are.
+3. **Each variant is a copy of the base**, made with `copy_presentation`. The copy keeps the
+   originals' object identifiers — the same `cardRed01` addresses the panel in every deck of
+   the series — so the same short sequence of calls fills in any month, and a fix to the base
+   can be replayed across the variants without reading each one back.
+
+Two consequences worth knowing before the second variant:
+
+- **A copy of a copy inherits the drift.** Fix the base first, then re-copy; a fix applied to
+  three variants and forgotten on the fourth is the one people notice.
+- **Every background is a file on the drive for ever.** Four pictures per variant is four
+  files per month, and there is no removal here. Draw and check them locally first — a
+  stand-in page at the layouts' real geometry (EMU / 9144000 × 2560) shows a collision with
+  the title before the picture costs anything.
+
+### Size the panels against the decks people actually write
+
+A panel sized against the words a template puts in it overflows on the first real month. The
+numbers to size against are in the decks already delivered: export a dozen of them as text,
+find the blocks by their own headings, and count.
+
+What that answered for one such series, and what it changed: the block "what we did" runs to
+five lines at the median and ten at the ninth decile, of forty-eight and ninety-three
+characters — so the wide panel, which holds fourteen lines, is right. The blocks beside it run
+to one and six lines, but their lines are long — up to a hundred and fifty-eight characters,
+four wrapped lines each — so splitting the right-hand column in half was wrong, and it now
+divides by weight instead.
+
+Measuring the capacity is the other half: a panel's width in points, minus Slides' own insets
+of 7.2 pt a side, over the average glyph width of the actual font at the actual size. Render
+the font and measure it rather than assuming a ratio — Rubik at 11.5 pt fits seventy-six
+characters where the guess said sixty.
+
 ### Multiplying a shape the API cannot build
 
 A panel with the author's corner radius, or anything else carrying adjustment values, arrives

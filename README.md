@@ -56,7 +56,7 @@ offers only the reading tools.
 
 ## Choosing the set of tools
 
-A hundred and thirty-five tool descriptions in an agent's context is a hundred and thirty
+A hundred and thirty-seven tool descriptions in an agent's context is a hundred and thirty
 it will never call. `--tools` picks what a server offers, by family and by what the tools
 do:
 
@@ -86,10 +86,11 @@ window cannot show what `--tools` did not allow.
 
 ## Tools
 
-A hundred and thirty-five of them, covering every request the three APIs have except the
+A hundred and thirty-seven of them, covering every request the three APIs have except the
 five that reach BigQuery. A server started without `--allow-write` registers the reading
-ones and nothing else, and the three that touch the disk appear only when `--files-dir`
-names a directory they may use.
+ones and nothing else, and the four that touch the disk — `gdocs_drive_export_file`,
+`gdocs_drive_download_file`, `gdocs_drive_import_file` and `gdocs_slides_export_images` —
+appear only when `--files-dir` names a directory they may use.
 
 They come in pairs on purpose: whatever a reading tool reports, a writing tool takes back
 in the same units. There is no tool that copies styling from one deck into another in one

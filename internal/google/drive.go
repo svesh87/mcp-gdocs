@@ -264,6 +264,22 @@ func (c *Client) ExportFile(ctx context.Context, fileID, mimeType string) ([]byt
 	return content, contentType, nil
 }
 
+// DownloadFile fetches a file's own bytes, unchanged.
+//
+// This is the other half of ExportFile and not a variant of it: export converts a Google
+// editor file and refuses everything else ("Export only supports Docs Editors files"),
+// while this reads what was uploaded — a PDF, a picture, an archive — and refuses the
+// editor files in turn, because a document has no bytes of its own to hand over. Drive
+// answers the same address either way; alt=media is what asks for content instead of
+// metadata.
+func (c *Client) DownloadFile(ctx context.Context, fileID string) ([]byte, string, error) {
+	query := url.Values{}
+	query.Set("alt", "media")
+	query.Set("supportsAllDrives", "true")
+
+	return c.download(ctx, endpoint(c.driveBase, "/files/"+url.PathEscape(fileID), query))
+}
+
 // editorExport is where a Google editor serves a conversion of its own document, without
 // the size ceiling Drive's export has. It is empty for formats or kinds not served there.
 func (c *Client) editorExport(fileID, mimeType string) string {

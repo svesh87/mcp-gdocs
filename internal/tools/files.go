@@ -99,6 +99,18 @@ func (r *registry) registerFiles(srv *server.MCPServer) {
 				"outside it is refused.")),
 	), r.exportFile)
 
+	srv.AddTool(mcp.NewTool("gdocs_drive_download_file",
+		mcp.WithDescription("Save a file from Drive to disk exactly as it is: a PDF, a picture, an archive, "+
+			"anything that was uploaded rather than authored in a Google editor. "+
+			"gdocs_drive_export_file is for the other kind and refuses these — export converts a document, "+
+			"a deck or a spreadsheet and answers \"Export only supports Docs Editors files\" for the rest. "+
+			"Use this to read a brandbook, a media kit or a picture somebody left on the drive."),
+		mcp.WithString("file_id", mcp.Required(), mcp.Description("File to download.")),
+		mcp.WithString("save_as", mcp.Description(
+			"File name inside the server's files directory. Without one, the file's own name on Drive. "+
+				"Subdirectories are allowed; anything leading outside it is refused.")),
+	), r.downloadFile)
+
 	srv.AddTool(mcp.NewTool("gdocs_slides_export_images",
 		mcp.WithDescription("Render slides to picture files on disk — the whole deck by default, or the ones "+
 			"named. This is how a rebuilt deck gets checked against its sample: gdocs_slides_export_thumbnail "+
@@ -180,6 +192,59 @@ func (r *registry) exportFile(ctx context.Context, req mcp.CallToolRequest) (*mc
 		"file_id":      fileID,
 		"format":       strings.ToLower(format),
 		"mime_type":    mimeType,
+		"content_type": contentType,
+		"path":         path,
+		"bytes":        len(content),
+	})
+}
+
+// downloadFile saves a file's own bytes into the server's files directory.
+func (r *registry) downloadFile(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	fileID, err := requiredString(req, "file_id")
+	if err != nil {
+		return toolError(err), nil
+	}
+
+	client, err := r.client(ctx)
+	if err != nil {
+		return toolError(err), nil
+	}
+
+	// Without a name of its own the file keeps the one it has on Drive, which is the name
+	// the caller saw when they found it. Only the last element of it: a name with a slash
+	// in it would otherwise decide which directory the file lands in.
+	saveAs := optionalString(req, "save_as")
+	if saveAs == "" {
+		file, err := client.FileMetadata(ctx, fileID)
+		if err != nil {
+			return toolError(err), nil
+		}
+		saveAs = filepath.Base(strings.TrimSpace(file.Name))
+	}
+
+	path, err := r.filePath(saveAs)
+	if err != nil {
+		return toolError(err), nil
+	}
+
+	content, contentType, err := client.DownloadFile(ctx, fileID)
+	if err != nil {
+		// Drive's own refusal names neither the kind of file nor the way around it: it says
+		// only that the content is not binary. The way around is the other tool.
+		if strings.Contains(err.Error(), "binary content") {
+			return toolError(fmt.Errorf("%w — this is a Google editor file and has no bytes of its own: "+
+				"gdocs_drive_export_file converts it into a pdf, docx, pptx or xlsx instead", err)), nil
+		}
+
+		return toolError(err), nil
+	}
+
+	if err := writeFile(path, content); err != nil {
+		return toolError(err), nil
+	}
+
+	return resultJSON(map[string]any{
+		"file_id":      fileID,
 		"content_type": contentType,
 		"path":         path,
 		"bytes":        len(content),

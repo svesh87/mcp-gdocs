@@ -40,6 +40,7 @@
     "gdocs_drive_delete_to_trash"
   ],
   "drive-read": [
+    "gdocs_drive_download_file",
     "gdocs_drive_export",
     "gdocs_drive_export_file",
     "gdocs_drive_file_info",

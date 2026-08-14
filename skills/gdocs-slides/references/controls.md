@@ -110,6 +110,7 @@ the frame comes out even instead of showing seams where two cells disagreed.
 | render the whole deck to pictures | `gdocs_slides_export_images` |
 | render one slide to a short-lived address | `gdocs_slides_export_thumbnail` |
 | save a deck as PDF, PPTX, ODP … | `gdocs_drive_export_file` |
+| save a picture, a PDF or an archive off the drive as it is | `gdocs_drive_download_file` |
 | bring a .pptx back in as a Google presentation | `gdocs_drive_import_file` |
 | look up shapes, bullet presets, arrowheads, dashes, theme colour names, units | `gdocs_reference` |
 

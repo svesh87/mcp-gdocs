@@ -104,6 +104,71 @@ func TestExportFileRefusesAFormatItDoesNotKnow(t *testing.T) {
 	}
 }
 
+// TestDownloadFileSavesTheBytesAsTheyAre covers the half of the job export cannot do: a
+// PDF that was uploaded rather than authored has no conversion to ask for, and alt=media is
+// what tells Drive to answer with content instead of metadata.
+func TestDownloadFileSavesTheBytesAsTheyAre(t *testing.T) {
+	fake := newFakeGoogle(t).answer("/files/brandbook", "%PDF-1.7 pretend brandbook")
+	h, dir := filesHarness(t, fake)
+
+	answer := h.ok(h.registry.downloadFile(context.Background(), request(map[string]any{
+		"file_id": "brandbook",
+		"save_as": "brand/brandbook.pdf",
+	})))
+
+	content, err := os.ReadFile(filepath.Join(dir, "brand", "brandbook.pdf"))
+	if err != nil {
+		t.Fatalf("the file should be on disk: %v", err)
+	}
+	if !strings.HasPrefix(string(content), "%PDF") {
+		t.Errorf("the file holds %q", content)
+	}
+	if !strings.Contains(answer, "brand/brandbook.pdf") {
+		t.Errorf("the answer should name the path, got %s", answer)
+	}
+
+	if query := h.google.requests[0].Query; !strings.Contains(query, "alt=media") {
+		t.Errorf("the download should ask for the content, got %s", query)
+	}
+}
+
+// TestDownloadFileKeepsTheDriveName is why save_as is optional: a caller that found a file
+// by searching knows its name and should not have to repeat it, and a name with a slash in
+// it must not decide which directory the file lands in.
+func TestDownloadFileKeepsTheDriveName(t *testing.T) {
+	fake := newFakeGoogle(t).answer("/files/kit", `{"id": "kit", "name": "decks/Media kit.pdf"}`)
+	h, dir := filesHarness(t, fake)
+
+	answer := h.ok(h.registry.downloadFile(context.Background(), request(map[string]any{
+		"file_id": "kit",
+	})))
+
+	if _, err := os.Stat(filepath.Join(dir, "Media kit.pdf")); err != nil {
+		t.Errorf("the file should keep its own name, without the directory in it: %v", err)
+	}
+	if strings.Contains(answer, "decks/Media kit.pdf") {
+		t.Errorf("the name's directory should have been dropped, got %s", answer)
+	}
+}
+
+// TestDownloadFileRefusesAnEditorFile pins the error, not the failure: Drive says only that
+// the content is not binary, and the caller needs to be told which tool does this instead.
+func TestDownloadFileRefusesAnEditorFile(t *testing.T) {
+	fake := newFakeGoogle(t).fail("/files/doc", 403,
+		`{"error": {"code": 403, "status": "PERMISSION_DENIED", "message":
+		   "Only files with binary content can be downloaded. Use Export with Docs Editors files."}}`)
+	h, _ := filesHarness(t, fake)
+
+	message := h.fail(h.registry.downloadFile(context.Background(), request(map[string]any{
+		"file_id": "doc",
+		"save_as": "doc.bin",
+	})))
+
+	if !strings.Contains(message, "gdocs_drive_export_file") {
+		t.Errorf("the refusal should name the tool that does convert, got %q", message)
+	}
+}
+
 // TestExportSlideImagesRendersTheWholeDeck pins the loop a visual check depends on: every
 // slide, in order, named so a listing sorts them the way the deck runs.
 func TestExportSlideImagesRendersTheWholeDeck(t *testing.T) {

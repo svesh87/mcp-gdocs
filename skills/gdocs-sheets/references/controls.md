@@ -192,6 +192,7 @@ and `table` — and the answer says so.
 | What | Tool |
 |---|---|
 | export a workbook to pdf, xlsx, ods, csv | `gdocs_drive_export_file` |
+| save a picture, a PDF or an archive off the drive as it is | `gdocs_drive_download_file` |
 | find a workbook by name | `gdocs_drive_search` |
 | copy a whole workbook as a starting point | `gdocs_drive_copy` |
 | put a workbook in the bin | `gdocs_drive_delete_to_trash`, only with `drive-delete` |

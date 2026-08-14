@@ -73,8 +73,12 @@ var families = map[string][]Group{
 // its group, so the names have to say what they do — which is why the file tools are
 // called gdocs_drive_export_file and gdocs_slides_export_images rather than anything
 // shorter.
+// "download" is here for the same reason as "export": both take a file out of Drive and
+// leave Drive as it was. What they write to is the server's own files directory, which is
+// what --files-dir is for, and neither changes anything an operator could lose.
 var readingVerbs = []string{
-	"read", "list", "inspect", "info", "search", "export", "thumbnail", "colors", "structure",
+	"read", "list", "inspect", "info", "search", "export", "download", "thumbnail",
+	"colors", "structure",
 }
 
 // GroupOf works out which group a tool belongs to from its name.

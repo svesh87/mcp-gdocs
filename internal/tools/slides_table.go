@@ -241,6 +241,55 @@ func cellText(cell any) (string, error) {
 }
 
 // parseColor reads an optional RGB colour with components from 0 to 1.
+// paletteNames are the colour names a request may refer to.
+//
+// Twelve of them are the scheme itself, the ones set_theme_colors writes. The other four
+// are aliases Slides accepts in a reference — TEXT1 and BACKGROUND1 are DARK1 and LIGHT1
+// seen from the text's side — and they are allowed here because a sample reports them and
+// a caller copying that sample should not have to translate.
+var paletteNames = func() map[string]bool {
+	names := map[string]bool{
+		"TEXT1": true, "TEXT2": true, "BACKGROUND1": true, "BACKGROUND2": true,
+	}
+	for _, name := range google.ThemeColorTypes {
+		names[name] = true
+	}
+	return names
+}()
+
+// paletteColor reads a colour named from the deck's palette instead of spelled out.
+//
+// A name is what makes a deck's look one knob rather than forty: everything referring to a
+// name follows gdocs_slides_set_theme_colors, everything painted with a literal does not.
+// That is the whole difference between a series of decks that can be recoloured for a
+// season and one that has to be repainted shape by shape.
+//
+// The name is checked here rather than at Google, which answers a wrong one with
+// "Invalid requests[0]" and nothing about which field or which name.
+func paletteColor(req mcp.CallToolRequest, name string) (string, error) {
+	value := strings.ToUpper(strings.TrimSpace(optionalString(req, name)))
+	if value == "" {
+		return "", nil
+	}
+	if !paletteNames[value] {
+		return "", fmt.Errorf("%s is %q, which is not a colour of the palette: use one of %s",
+			name, value, strings.Join(sortedPaletteNames(), ", "))
+	}
+
+	return value, nil
+}
+
+// sortedPaletteNames orders the names for an error message, so the same mistake is
+// answered the same way every time.
+func sortedPaletteNames() []string {
+	names := make([]string, 0, len(paletteNames))
+	for name := range paletteNames {
+		names = append(names, name)
+	}
+
+	return sortedStrings(names)
+}
+
 func parseColor(req mcp.CallToolRequest, name string) (*google.RGBColor, error) {
 	raw, ok := req.GetArguments()[name]
 	if !ok || raw == nil {

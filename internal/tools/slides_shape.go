@@ -122,10 +122,17 @@ func (r *registry) registerSlidesShape(srv *server.MCPServer) {
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
 		mcp.WithString("object_id", mcp.Required(), mcp.Description("Shape to restyle.")),
 		mcp.WithObject("fill_color", mcp.Description("Fill colour as {\"red\": 0..1, \"green\": 0..1, \"blue\": 0..1}.")),
+		mcp.WithString("fill_theme_color", mcp.Description(
+			"Fill by palette name instead of by value — DARK1, LIGHT1, ACCENT1...ACCENT6, HYPERLINK and "+
+				"the TEXT1/BACKGROUND1 aliases. A fill painted this way follows "+
+				"gdocs_slides_set_theme_colors; a literal one does not. This is what makes a series of "+
+				"decks recolourable in one call instead of shape by shape.")),
 		mcp.WithNumber("fill_alpha", mcp.Description("Fill opacity from 0 to 1. Default 1.")),
 		mcp.WithBoolean("no_fill", mcp.Description("Make the shape transparent.")),
 		mcp.WithBoolean("inherit_fill", mcp.Description("Give the fill back to the layout.")),
 		mcp.WithObject("outline_color", mcp.Description("Outline colour, same shape as fill_color.")),
+		mcp.WithString("outline_theme_color", mcp.Description(
+			"Outline by palette name, the same names as fill_theme_color.")),
 		mcp.WithNumber("outline_weight_emu", mcp.Description("Outline thickness in EMU. 12700 is one point.")),
 		mcp.WithString("outline_dash", mcp.Description(
 			"SOLID, DOT, DASH, DASH_DOT, LONG_DASH or LONG_DASH_DOT.")),
@@ -155,6 +162,9 @@ func (r *registry) registerSlidesShape(srv *server.MCPServer) {
 		mcp.WithNumber("brightness", mcp.Description("From -1 to 1, 0 leaves it alone.")),
 		mcp.WithNumber("contrast", mcp.Description("From -1 to 1, 0 leaves it alone.")),
 		mcp.WithObject("outline_color", mcp.Description("Border colour as {\"red\": 0..1, \"green\": 0..1, \"blue\": 0..1}.")),
+		mcp.WithString("outline_theme_color", mcp.Description(
+			"Border by palette name — DARK1, LIGHT1, ACCENT1...ACCENT6 — instead of by value, so it "+
+				"follows the theme when the palette changes.")),
 		mcp.WithNumber("outline_weight_emu", mcp.Description("Border thickness in EMU. 12700 is one point.")),
 		mcp.WithString("outline_dash", mcp.Description("SOLID, DOT, DASH, DASH_DOT, LONG_DASH or LONG_DASH_DOT.")),
 		mcp.WithBoolean("no_outline", mcp.Description("Remove the border.")),
@@ -202,29 +212,37 @@ func shapeStyleFrom(req mcp.CallToolRequest) (*shapeStyle, error) {
 	if err != nil {
 		return nil, err
 	}
+	fillTheme, err := paletteColor(req, "fill_theme_color")
+	if err != nil {
+		return nil, err
+	}
 
 	noFill := req.GetBool("no_fill", false)
 	inheritFill := req.GetBool("inherit_fill", false)
 
 	chosen := 0
-	for _, set := range []bool{fillColor != nil, noFill, inheritFill} {
+	for _, set := range []bool{fillColor != nil, fillTheme != "", noFill, inheritFill} {
 		if set {
 			chosen++
 		}
 	}
 	if chosen > 1 {
-		return nil, fmt.Errorf("fill_color, no_fill and inherit_fill are alternatives: name one")
+		return nil, fmt.Errorf("fill_color, fill_theme_color, no_fill and inherit_fill are alternatives: name one")
 	}
 
 	switch {
-	case fillColor != nil:
+	case fillColor != nil, fillTheme != "":
 		alpha := req.GetFloat("fill_alpha", 1)
 		if alpha < 0 || alpha > 1 {
 			return nil, fmt.Errorf("fill_alpha is %g: opacity runs from 0 to 1", alpha)
 		}
+		colour := &google.OpaqueColor{RGBColor: fillColor}
+		if fillTheme != "" {
+			colour = &google.OpaqueColor{ThemeColor: fillTheme}
+		}
 		style.BackgroundFill = &google.ShapeBackgroundFill{
 			PropertyState: "RENDERED",
-			SolidFill:     &google.SolidFill{Color: &google.OpaqueColor{RGBColor: fillColor}, Alpha: alpha},
+			SolidFill:     &google.SolidFill{Color: colour, Alpha: alpha},
 		}
 		fields = append(fields, "shapeBackgroundFill")
 	case noFill:
@@ -235,7 +253,8 @@ func shapeStyleFrom(req mcp.CallToolRequest) (*shapeStyle, error) {
 		fields = append(fields, "shapeBackgroundFill")
 	}
 
-	outline, err := outlineFrom(req, "outline_color", "outline_weight_emu", "outline_dash", "no_outline")
+	outline, err := outlineFrom(req, "outline_color", "outline_theme_color",
+		"outline_weight_emu", "outline_dash", "no_outline")
 	if err != nil {
 		return nil, err
 	}
@@ -278,10 +297,18 @@ func shapeStyleFrom(req mcp.CallToolRequest) (*shapeStyle, error) {
 }
 
 // outlineFrom reads a border out of the arguments, under whatever names the tool uses.
-func outlineFrom(req mcp.CallToolRequest, colorName, weightName, dashName, noneName string) (*google.Outline, error) {
+func outlineFrom(req mcp.CallToolRequest, colorName, themeName, weightName, dashName, noneName string,
+) (*google.Outline, error) {
 	colour, err := parseColor(req, colorName)
 	if err != nil {
 		return nil, err
+	}
+	theme, err := paletteColor(req, themeName)
+	if err != nil {
+		return nil, err
+	}
+	if colour != nil && theme != "" {
+		return nil, fmt.Errorf("%s and %s are alternatives: name one", colorName, themeName)
 	}
 
 	weight := req.GetFloat(weightName, 0)
@@ -289,13 +316,14 @@ func outlineFrom(req mcp.CallToolRequest, colorName, weightName, dashName, noneN
 	none := req.GetBool(noneName, false)
 
 	if none {
-		if colour != nil || weight > 0 || dash != "" {
-			return nil, fmt.Errorf("%s cannot be combined with %s, %s or %s", noneName, colorName, weightName, dashName)
+		if colour != nil || theme != "" || weight > 0 || dash != "" {
+			return nil, fmt.Errorf("%s cannot be combined with %s, %s, %s or %s",
+				noneName, colorName, themeName, weightName, dashName)
 		}
 		return &google.Outline{PropertyState: "NOT_RENDERED"}, nil
 	}
 
-	if colour == nil && weight == 0 && dash == "" {
+	if colour == nil && theme == "" && weight == 0 && dash == "" {
 		return nil, nil
 	}
 
@@ -309,9 +337,13 @@ func outlineFrom(req mcp.CallToolRequest, colorName, weightName, dashName, noneN
 	}
 
 	outline := &google.Outline{PropertyState: "RENDERED", DashStyle: dash}
-	if colour != nil {
+	if colour != nil || theme != "" {
+		painted := &google.OpaqueColor{RGBColor: colour}
+		if theme != "" {
+			painted = &google.OpaqueColor{ThemeColor: theme}
+		}
 		outline.OutlineFill = &google.OutlineFill{
-			SolidFill: &google.SolidFill{Color: &google.OpaqueColor{RGBColor: colour}, Alpha: 1},
+			SolidFill: &google.SolidFill{Color: painted, Alpha: 1},
 		}
 	}
 	if weight > 0 {
@@ -568,7 +600,8 @@ func (r *registry) slidesStyleImage(ctx context.Context, req mcp.CallToolRequest
 		fields = append(fields, adjustment.name)
 	}
 
-	outline, err := outlineFrom(req, "outline_color", "outline_weight_emu", "outline_dash", "no_outline")
+	outline, err := outlineFrom(req, "outline_color", "outline_theme_color",
+		"outline_weight_emu", "outline_dash", "no_outline")
 	if err != nil {
 		return toolError(err), nil
 	}

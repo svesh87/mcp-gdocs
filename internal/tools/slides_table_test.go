@@ -310,6 +310,41 @@ func TestStyleTableCellRefusals(t *testing.T) {
 	}
 }
 
+// TestStyleTablePaintsFromThePalette covers the table's half of the same idea as the
+// shapes': a themed deck's table has to follow the palette, or recolouring the deck leaves
+// its tables behind in the old season's colours.
+func TestStyleTablePaintsFromThePalette(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).
+		answer("/presentations/deck:batchUpdate", emptyBatchReply).
+		answer("/presentations/deck", presentationWithFilledTable))
+
+	h.ok(h.registry.slidesStyleTable(context.Background(), request(map[string]any{
+		"presentation_id": "deck",
+		"object_id":       "table1",
+		"fill": []any{
+			map[string]any{"row": 0, "column": 0, "theme_color": "accent2"},
+		},
+		"cell_styles": []any{
+			map[string]any{"row": float64(0), "column": float64(0), "theme_color": "LIGHT1"},
+		},
+	})))
+
+	body := string(h.bodyOf(t, 1))
+	for _, want := range []string{`"themeColor": "ACCENT2"`, `"themeColor": "LIGHT1"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the request should carry %s, got %s", want, body)
+		}
+	}
+
+	if message := h.fail(h.registry.slidesStyleTable(context.Background(), request(map[string]any{
+		"presentation_id": "deck",
+		"object_id":       "table1",
+		"fill":            []any{map[string]any{"row": 0, "column": 0, "theme_color": "PUMPKIN"}},
+	}))); !strings.Contains(message, "PUMPKIN") {
+		t.Errorf("a colour outside the palette should be refused by name, got %q", message)
+	}
+}
+
 func TestStyleTableRefusesAFillWithoutAColour(t *testing.T) {
 	h := newHarness(t, newFakeGoogle(t).
 		answer("/presentations/deck:batchUpdate", emptyBatchReply).

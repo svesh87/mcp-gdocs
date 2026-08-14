@@ -587,7 +587,10 @@ func (r *registry) slidesStyleLayout(ctx context.Context, req mcp.CallToolReques
 	if err != nil {
 		return toolError(err), nil
 	}
-	themeColor := strings.ToUpper(optionalString(req, "theme_color"))
+	themeColor, err := paletteColor(req, "theme_color")
+	if err != nil {
+		return toolError(err), nil
+	}
 
 	if colour != nil && themeColor != "" {
 		return toolError(fmt.Errorf("foreground_color and theme_color are alternatives: name one")), nil

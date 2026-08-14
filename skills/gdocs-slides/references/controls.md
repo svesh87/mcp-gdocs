@@ -23,6 +23,7 @@ slide is 9144000 × 5143500), **points** for font sizes and the space around par
 | which slides exist, in which order | `gdocs_slides_list` | `gdocs_slides_add_slide`, `gdocs_slides_reorder`, `gdocs_slides_delete` |
 | a slide kept but not shown | `gdocs_slides_list` (`hidden`), `gdocs_slides_inspect_page` | `gdocs_slides_hide` |
 | the deck's palette — twelve colours by name | `gdocs_slides_read_theme` | `gdocs_slides_set_theme_colors` (master only, all twelve at once) |
+| anything painted **from** the palette rather than by value | `inspect_page`, `read_theme`, `inspect_title_style` (`theme_color`) | `style_shape` (`fill_theme_color`, `outline_theme_color`), `style_table` (`theme_color` in `fill` and in `cell_styles`), `set_text_style` and `style_layout` (`theme_color`) |
 | what every slide on a layout looks like | `gdocs_slides_read_theme`, `gdocs_slides_list_layouts` | `gdocs_slides_style_layout` |
 | a new deck from a template | `gdocs_drive_search`, `gdocs_drive_file_info` | `gdocs_slides_copy_presentation` |
 | a new deck with no template behind it | — | `gdocs_slides_create`, then `set_theme_colors` and `style_layout` to build the look |

@@ -240,13 +240,16 @@ func (r *registry) registerSlidesLayout(srv *server.MCPServer) {
 		mcp.WithArray("fill", mcp.Description(
 			"Cells to fill, as a list of objects: "+
 				"{\"row\": 0, \"column\": 0, \"row_span\": 1, \"column_span\": 3, "+
-				"\"color\": {\"red\": 0.94, \"green\": 0.94, \"blue\": 0.94}}."),
+				"\"color\": {\"red\": 0.94, \"green\": 0.94, \"blue\": 0.94}}. "+
+				"An entry may name a palette colour instead — {\"theme_color\": \"ACCENT2\"} — and then "+
+				"the cell follows gdocs_slides_set_theme_colors rather than keeping the value."),
 			mcp.Items(map[string]any{"type": "object"})),
 		mcp.WithArray("cell_styles", mcp.Description(
 			"How the text of particular cells looks, as a list of objects: "+
 				"{\"row\": 0, \"column\": 1, \"bold\": true, \"italic\": false, \"font_size\": 14, "+
 				"\"font_family\": \"Rubik\", \"alignment\": \"CENTER\", "+
 				"\"text_color\": {\"red\": 0.26, \"green\": 0.26, \"blue\": 0.26}}. "+
+				"\"theme_color\": \"DARK2\" paints the words from the palette instead. "+
 				"This is the shape gdocs_slides_read_table reports, cell for cell: a table whose header "+
 				"is centred and whose first column is bold cannot be described by one style per column, "+
 				"and a copy made that way reads as a different table."),
@@ -499,22 +502,41 @@ func (r *registry) slidesStyleTable(ctx context.Context, req mcp.CallToolRequest
 				return toolError(fmt.Errorf("fill[%d]: %w", index, err)), nil
 			}
 
-			colour, ok := entry["color"].(map[string]any)
-			if !ok {
-				return toolError(fmt.Errorf("fill[%d].color is missing: give red, green and blue from 0 to 1", index)), nil
-			}
+			// A cell is filled either by value or by a name from the palette. The name is
+			// what lets a whole deck be recoloured with set_theme_colors afterwards, so a
+			// table in a themed series is filled that way and a one-off by value.
+			painted := &google.OpaqueColor{}
+			themed, ok := entry["theme_color"].(string)
+			colour, hasColour := entry["color"].(map[string]any)
 
-			rgb := &google.RGBColor{}
-			for name, target := range map[string]*float64{
-				"red": &rgb.Red, "green": &rgb.Green, "blue": &rgb.Blue,
-			} {
-				if value, present := colour[name]; present {
-					number, ok := value.(float64)
-					if !ok || number < 0 || number > 1 {
-						return toolError(fmt.Errorf("fill[%d].color.%s must be a number from 0 to 1", index, name)), nil
-					}
-					*target = number
+			switch {
+			case ok && themed != "" && hasColour:
+				return toolError(fmt.Errorf("fill[%d]: color and theme_color are alternatives: name one", index)), nil
+			case ok && themed != "":
+				name := strings.ToUpper(strings.TrimSpace(themed))
+				if !paletteNames[name] {
+					return toolError(fmt.Errorf("fill[%d].theme_color is %q, which is not a colour of the "+
+						"palette: use one of %s", index, themed, strings.Join(sortedPaletteNames(), ", "))), nil
 				}
+				painted.ThemeColor = name
+			case hasColour:
+				rgb := &google.RGBColor{}
+				for name, target := range map[string]*float64{
+					"red": &rgb.Red, "green": &rgb.Green, "blue": &rgb.Blue,
+				} {
+					if value, present := colour[name]; present {
+						number, ok := value.(float64)
+						if !ok || number < 0 || number > 1 {
+							return toolError(fmt.Errorf("fill[%d].color.%s must be a number from 0 to 1",
+								index, name)), nil
+						}
+						*target = number
+					}
+				}
+				painted.RGBColor = rgb
+			default:
+				return toolError(fmt.Errorf("fill[%d] has neither color nor theme_color: give red, green and "+
+					"blue from 0 to 1, or a palette name", index)), nil
 			}
 
 			requests = append(requests, google.Request{
@@ -523,7 +545,7 @@ func (r *registry) slidesStyleTable(ctx context.Context, req mcp.CallToolRequest
 					TableRange: area,
 					TableCellProperties: &google.TableCellProperties{
 						BackgroundFill: &google.TableCellBackgroundFill{
-							SolidFill: &google.SolidFill{Color: &google.OpaqueColor{RGBColor: rgb}, Alpha: 1},
+							SolidFill: &google.SolidFill{Color: painted, Alpha: 1},
 						},
 					},
 					Fields: "tableCellBackgroundFill.solidFill.color",
@@ -662,6 +684,15 @@ func cellStyleRequests(objectID string, entry map[string]any, table *google.Tabl
 			*target = number
 		}
 		style.ForegroundColor = &google.OptionalColor{OpaqueColor: &google.OpaqueColor{RGBColor: rgb}}
+		fields = append(fields, "foregroundColor")
+	} else if themed := stringField(entry, "theme_color"); themed != "" {
+		// By name, so the cell follows the palette the way a themed shape does.
+		name := strings.ToUpper(strings.TrimSpace(themed))
+		if !paletteNames[name] {
+			return nil, fmt.Errorf("theme_color is %q, which is not a colour of the palette: use one of %s",
+				themed, strings.Join(sortedPaletteNames(), ", "))
+		}
+		style.ForegroundColor = &google.OptionalColor{OpaqueColor: &google.OpaqueColor{ThemeColor: name}}
 		fields = append(fields, "foregroundColor")
 	}
 

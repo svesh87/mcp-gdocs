@@ -497,6 +497,59 @@ func TestStyleShape(t *testing.T) {
 	checkGolden(t, "style_shape.json", h.bodyOf(t, 0))
 }
 
+// TestStyleShapePaintsFromThePalette is the difference between a deck that can be
+// recoloured for a season and one that has to be repainted shape by shape: a fill that
+// names a palette colour follows gdocs_slides_set_theme_colors, a literal one does not.
+func TestStyleShapePaintsFromThePalette(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).answer("/presentations/deck:batchUpdate", emptyBatchReply))
+
+	h.ok(h.registry.slidesStyleShape(context.Background(), request(map[string]any{
+		"presentation_id":     "deck",
+		"object_id":           "panel1",
+		"fill_theme_color":    "accent2",
+		"outline_theme_color": "ACCENT3",
+	})))
+
+	body := string(h.bodyOf(t, 0))
+	for _, want := range []string{`"themeColor": "ACCENT2"`, `"themeColor": "ACCENT3"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the request should carry %s, got %s", want, body)
+		}
+	}
+	// A named colour carries no value of its own; sending both is how a fill stops
+	// following the theme without anybody noticing.
+	if strings.Contains(body, "rgbColor") {
+		t.Errorf("a palette colour must not be sent as a value too: %s", body)
+	}
+}
+
+// TestStyleShapeRefusesAColourOutsideThePalette keeps the mistake local. Google answers a
+// wrong name with "Invalid requests[0]" and nothing about which field or which name.
+func TestStyleShapeRefusesAColourOutsideThePalette(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).answer("/presentations/deck:batchUpdate", emptyBatchReply))
+
+	message := h.fail(h.registry.slidesStyleShape(context.Background(), request(map[string]any{
+		"presentation_id":  "deck",
+		"object_id":        "panel1",
+		"fill_theme_color": "PUMPKIN",
+	})))
+
+	for _, want := range []string{"PUMPKIN", "ACCENT1", "LIGHT1"} {
+		if !strings.Contains(message, want) {
+			t.Errorf("the refusal should name the mistake and the choices, got %q", message)
+		}
+	}
+
+	if message := h.fail(h.registry.slidesStyleShape(context.Background(), request(map[string]any{
+		"presentation_id":  "deck",
+		"object_id":        "panel1",
+		"fill_color":       map[string]any{"red": 1.0, "green": 0.0, "blue": 0.0},
+		"fill_theme_color": "ACCENT1",
+	}))); !strings.Contains(message, "alternatives") {
+		t.Errorf("a value and a name together should be refused, got %q", message)
+	}
+}
+
 // TestStyleShapeSetsAutofit pins what Slides actually accepts. A sample's title measuring
 // 25 pt where it reports 28 has its text shrunk to fit, and that cannot be switched on:
 // the API answers anything but NONE with "Autofit types other than NONE are not

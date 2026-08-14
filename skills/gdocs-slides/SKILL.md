@@ -103,6 +103,32 @@ Two consequences worth knowing before starting:
   is invisible to every reading; note it somewhere the next agent will look, because the
   deck will not tell them.
 
+### A colour by value, or a colour by name
+
+Every fill, outline and letter can be painted either with a value or with a name from the
+deck's palette — `ACCENT1`, `LIGHT1`, `DARK2` and the rest. The two look identical on the
+slide and behave nothing alike: a named colour follows `set_theme_colors`, a value never
+does. So the choice is not about style, it is about what a later recolour will reach.
+
+The rule that follows: **paint by name whatever the deck's look owns, and by value only what
+belongs to that one slide.** Panel fills, panel outlines, heading colour, body colour — by
+name. A one-off highlight on one word — by value.
+
+It matters most for a *series*: twelve decks of one family, one per month, each with its own
+season. Painted from the palette, a season is one call — `set_theme_colors` — and every panel
+and table follows. Painted with values, the same change is every shape on every slide, and
+the ones missed are found by a person reading the deck.
+
+Where the names go in: `style_shape` takes `fill_theme_color` and `outline_theme_color`,
+`style_table` takes `theme_color` inside `fill` and inside `cell_styles`, `set_text_style`
+and `style_layout` take `theme_color`. A reading reports which one a sample used —
+`inspect_page` and `inspect_title_style` answer `theme_color` where the author picked from
+the palette, and copying that as a value is how a copy stops following its own theme.
+
+The palette holds twelve slots and a deck usually wants more roles than that, so decide the
+mapping before painting: which accents carry the panel colours, which carries the heading,
+what stays a literal because it never changes with the season.
+
 ### Multiplying a shape the API cannot build
 
 A panel with the author's corner radius, or anything else carrying adjustment values, arrives

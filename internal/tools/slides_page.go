@@ -184,10 +184,16 @@ type describedFill struct {
 
 // describedOutline is a border as a caller reads it back.
 type describedOutline struct {
-	State     string  `json:"state,omitempty"`
-	Color     string  `json:"color,omitempty"`
-	WeightEMU float64 `json:"weight_emu,omitempty"`
-	DashStyle string  `json:"dash_style,omitempty"`
+	State string `json:"state,omitempty"`
+	Color string `json:"color,omitempty"`
+	// ThemeColor is a name like ACCENT3 rather than a value, for the same reason as on a
+	// fill. A colour is stored one way or the other and never both, so an outline painted
+	// by name has no value at all: reported without this it comes back as a border with a
+	// weight, a dash style and no colour, and a deck recoloured from that reading loses
+	// every border it had.
+	ThemeColor string  `json:"theme_color,omitempty"`
+	WeightEMU  float64 `json:"weight_emu,omitempty"`
+	DashStyle  string  `json:"dash_style,omitempty"`
 }
 
 // describedImage is what a picture does to itself: cropped, dimmed, washed out.
@@ -211,9 +217,12 @@ type describedCrop struct {
 
 // describedLine is a line or a connector as a caller reads it back.
 type describedLine struct {
-	Category   string  `json:"category,omitempty"`
-	LineType   string  `json:"line_type,omitempty"`
-	Color      string  `json:"color,omitempty"`
+	Category string `json:"category,omitempty"`
+	LineType string `json:"line_type,omitempty"`
+	Color    string `json:"color,omitempty"`
+	// ThemeColor is the same case as on an outline: a line drawn in a palette colour has no
+	// value stored, so without the name it reads as a line with no colour.
+	ThemeColor string  `json:"theme_color,omitempty"`
 	WeightEMU  float64 `json:"weight_emu,omitempty"`
 	DashStyle  string  `json:"dash_style,omitempty"`
 	StartArrow string  `json:"start_arrow,omitempty"`
@@ -583,6 +592,7 @@ func describeOutline(outline *google.Outline) *describedOutline {
 	if outline.OutlineFill != nil && outline.OutlineFill.SolidFill != nil &&
 		outline.OutlineFill.SolidFill.Color != nil {
 		described.Color = slideColor(outline.OutlineFill.SolidFill.Color.RGBColor)
+		described.ThemeColor = outline.OutlineFill.SolidFill.Color.ThemeColor
 	}
 
 	return described
@@ -628,6 +638,7 @@ func describeLine(line *google.Line) *describedLine {
 		if properties.LineFill != nil && properties.LineFill.SolidFill != nil &&
 			properties.LineFill.SolidFill.Color != nil {
 			described.Color = slideColor(properties.LineFill.SolidFill.Color.RGBColor)
+			described.ThemeColor = properties.LineFill.SolidFill.Color.ThemeColor
 		}
 	}
 

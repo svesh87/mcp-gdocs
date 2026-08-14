@@ -156,6 +156,69 @@ func TestInspectPageReportsATransparentFill(t *testing.T) {
 	}
 }
 
+// presentationPaintedFromThePalette is a deck whose borders are painted by name rather
+// than by value — a panel outlined ACCENT3 and a rule drawn in ACCENT1.
+const presentationPaintedFromThePalette = `{
+  "presentationId": "deck",
+  "slides": [
+    {
+      "objectId": "slide1",
+      "slideProperties": {"layoutObjectId": "layout_body"},
+      "pageElements": [
+        {
+          "objectId": "panel1",
+          "size": {"width": {"magnitude": 4000000, "unit": "EMU"}, "height": {"magnitude": 1000000, "unit": "EMU"}},
+          "transform": {"scaleX": 1, "scaleY": 1, "translateX": 400000, "translateY": 200000, "unit": "EMU"},
+          "shape": {
+            "shapeType": "ROUND_RECTANGLE",
+            "shapeProperties": {
+              "shapeBackgroundFill": {"propertyState": "RENDERED", "solidFill": {
+                 "color": {"themeColor": "ACCENT2"}, "alpha": 1}},
+              "outline": {"propertyState": "RENDERED", "weight": {"magnitude": 9525, "unit": "EMU"},
+                 "dashStyle": "SOLID",
+                 "outlineFill": {"solidFill": {"color": {"themeColor": "ACCENT3"}}}}
+            }
+          }
+        },
+        {
+          "objectId": "rule1",
+          "size": {"width": {"magnitude": 1000000, "unit": "EMU"}, "height": {"magnitude": 0, "unit": "EMU"}},
+          "transform": {"scaleX": 1, "scaleY": 1, "translateX": 400000, "translateY": 1400000, "unit": "EMU"},
+          "line": {"lineType": "STRAIGHT_LINE", "lineCategory": "STRAIGHT",
+            "lineProperties": {"weight": {"magnitude": 12700, "unit": "EMU"},
+              "lineFill": {"solidFill": {"color": {"themeColor": "ACCENT1"}}}}}
+        }
+      ]
+    }
+  ],
+  "layouts": [{"objectId": "layout_body", "layoutProperties": {"displayName": "Заголовок и текст"}}]
+}`
+
+// TestInspectPageReportsABorderPaintedByName is the reading a dark deck corrected. A
+// colour is stored either as a value or as a palette name, never both, so an outline
+// painted ACCENT3 has no value at all: reported without the name it came back as a border
+// with a weight, a dash style and no colour — and a recolouring done from that reading
+// takes every border off the deck.
+func TestInspectPageReportsABorderPaintedByName(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).answer("/presentations/deck", presentationPaintedFromThePalette))
+
+	answer := h.ok(h.registry.slidesInspectPage(context.Background(), request(map[string]any{
+		"presentation_id": "deck",
+		"page_object_id":  "slide1",
+	})))
+
+	for _, want := range []string{
+		`"theme_color": "ACCENT2"`,
+		`"theme_color": "ACCENT3"`,
+		// A line carries its colour the same way, and loses it the same way.
+		`"theme_color": "ACCENT1"`,
+	} {
+		if !strings.Contains(answer, want) {
+			t.Errorf("a colour written by name should be reported by name, %s missing from %s", want, answer)
+		}
+	}
+}
+
 // TestInspectPageComposesGroupTransforms keeps a child of a group from being reported
 // where it would sit if it stood on the slide by itself.
 func TestInspectPageComposesGroupTransforms(t *testing.T) {

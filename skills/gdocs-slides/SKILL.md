@@ -129,6 +129,20 @@ The palette holds twelve slots and a deck usually wants more roles than that, so
 mapping before painting: which accents carry the panel colours, which carries the heading,
 what stays a literal because it never changes with the season.
 
+**A panel is four colours, and the text is two of them.** Converting a deck to the palette by
+walking its fills and outlines looks finished and is half done: the heading's colour and the
+body's colour are stored on the text, not on the shape, and they stay literal. Nothing shows
+until the palette is inverted — and then every panel comes back with its fill dark and its
+words still dark, which is exactly the fault that reads as "the text merges with the panel".
+`inspect_page` will not warn about it either: it reports the shape, and the text colours are
+in `inspect_text_structure`.
+
+When the roles outnumber the slots, take them from the outlines rather than from the text.
+A panel's meaning is carried by its fill, so all four kinds can share **one** edge colour and
+release two slots for the ink — problem-heading and done-heading — which is what a dark
+variant cannot do without. Two calls per panel do it: `scope=all` for the body, `scope=title`
+for the heading.
+
 ### A series of decks that differ only in season
 
 A template that comes in twelve variants — one per month, one per event — is not twelve decks.

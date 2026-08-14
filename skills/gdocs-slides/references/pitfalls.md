@@ -147,10 +147,12 @@ the loss is easy to miss on a small render.
 
 **On the slide:** a caption the same size and colour as the heading above it, in a panel that
 looked right five minutes ago.
-**Instead:** read the box with `inspect_text_structure` before replacing anything, and set the
-paragraphs back afterwards by number — `scope=paragraph:0`, `paragraph:1` — with the values
-the reading reported. For a box that only needs different words in the same shape, edit the
-words, not the box.
+**Instead:** when only part of the words changes — a marker, a date, one word in twenty
+panels — use `gdocs_slides_replace_text`: it swaps the stretch in place and everything around
+it keeps its styling, and it answers with how many places it changed, so a search that matched
+nothing says so. When the whole box really is being rewritten, read it with
+`inspect_text_structure` first and set the paragraphs back afterwards by number —
+`scope=paragraph:0`, `paragraph:1` — with the values the reading reported.
 
 ### Recreating a table because its shape has to change
 A copied slide brings a table of the size it had. The instinct is to delete it and build a new

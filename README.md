@@ -56,7 +56,7 @@ offers only the reading tools.
 
 ## Choosing the set of tools
 
-A hundred and thirty-seven tool descriptions in an agent's context is a hundred and thirty
+A hundred and thirty-eight tool descriptions in an agent's context is a hundred and thirty
 it will never call. `--tools` picks what a server offers, by family and by what the tools
 do:
 
@@ -86,7 +86,7 @@ window cannot show what `--tools` did not allow.
 
 ## Tools
 
-A hundred and thirty-seven of them, covering every request the three APIs have except the
+A hundred and thirty-eight of them, covering every request the three APIs have except the
 five that reach BigQuery. A server started without `--allow-write` registers the reading
 ones and nothing else, and the four that touch the disk — `gdocs_drive_export_file`,
 `gdocs_drive_download_file`, `gdocs_drive_import_file` and `gdocs_slides_export_images` —
@@ -137,6 +137,7 @@ Slides, the content of a deck:
 | `gdocs_slides_copy_presentation` | start a deck from a template, keeping master, layouts and fonts |
 | `gdocs_slides_add_slide` | add a slide following one of the deck's own layouts |
 | `gdocs_slides_set_text` | replace a text box's text, styling left to the template |
+| `gdocs_slides_replace_text` | swap a stretch of text everywhere it appears, keeping the styling around it |
 | `gdocs_slides_replace_body_nested_list` | rebuild a body slide as a native nested list |
 | `gdocs_slides_create_table_with_text` | a real table with widths, fonts, colours and alignment |
 | `gdocs_slides_update_table_cells` | new values in a table that already exists, keeping its widths and styling |

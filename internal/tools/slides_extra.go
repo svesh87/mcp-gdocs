@@ -67,6 +67,23 @@ func (r *registry) registerSlidesExtra(srv *server.MCPServer) {
 			"CENTER_CROP fills the old frame and crops the overflow.")),
 	), r.slidesReplaceImage)
 
+	srv.AddTool(mcp.NewTool("gdocs_slides_replace_text",
+		mcp.WithDescription("Swap one stretch of text for another wherever it appears in the deck, keeping "+
+			"the styling of the words it stands among. This is how a word, a marker or a date is changed "+
+			"across twenty slides: gdocs_slides_set_text replaces a box's whole text and drops the "+
+			"paragraphs' styling with it, so a panel of a bold heading over grey bullets comes back as "+
+			"one flat block. Replacing an empty string is refused — it would insert the replacement "+
+			"before every character in the deck."),
+		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
+		mcp.WithString("find", mcp.Required(), mcp.Description("Text to look for.")),
+		mcp.WithString("replace", mcp.Required(), mcp.Description(
+			"Text to put in its place. An empty string deletes what was found.")),
+		mcp.WithBoolean("match_case", mcp.DefaultBool(true), mcp.Description("Match upper and lower case exactly.")),
+		mcp.WithArray("page_object_ids", mcp.WithStringItems(), mcp.Description(
+			"Limit to these slides. Without them, the whole deck.")),
+		mcp.WithIdempotentHintAnnotation(true),
+	), r.slidesReplaceText)
+
 	srv.AddTool(mcp.NewTool("gdocs_slides_replace_shapes_with_image",
 		mcp.WithDescription("Turn every shape whose text matches into a picture, keeping the shape's place "+
 			"and size. A template marked up with {{photo}} boxes becomes an illustrated deck in one call."),
@@ -317,6 +334,56 @@ func (r *registry) slidesReplaceImage(ctx context.Context, req mcp.CallToolReque
 	}
 
 	return resultJSON(map[string]any{"presentation_id": presentationID, "image_object_id": objectID})
+}
+
+func (r *registry) slidesReplaceText(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	presentationID, err := requiredString(req, "presentation_id")
+	if err != nil {
+		return toolError(err), nil
+	}
+	find, err := requiredString(req, "find")
+	if err != nil {
+		return toolError(err), nil
+	}
+	replacement, err := req.RequireString("replace")
+	if err != nil {
+		return toolError(err), nil
+	}
+
+	pages, err := stringListField(req.GetArguments(), "page_object_ids")
+	if err != nil {
+		return toolError(err), nil
+	}
+
+	client, err := r.client(ctx)
+	if err != nil {
+		return toolError(err), nil
+	}
+
+	replies, err := client.SlidesBatchUpdate(ctx, presentationID, []google.Request{{
+		ReplaceAllText: &google.ReplaceAllTextRequest{
+			ContainsText:  &google.SlidesTextMatch{Text: find, MatchCase: req.GetBool("match_case", true)},
+			ReplaceText:   replacement,
+			PageObjectIDs: pages,
+		},
+	}})
+	if err != nil {
+		return toolError(err), nil
+	}
+
+	// Google answers with how many boxes it touched. A caller that asked for a word it
+	// misspelled gets a silent success otherwise, and finds out on the render.
+	occurrences := 0
+	if replies != nil && len(replies.Replies) > 0 && replies.Replies[0].ReplaceAllText != nil {
+		occurrences = replies.Replies[0].ReplaceAllText.OccurrencesChanged
+	}
+
+	return resultJSON(map[string]any{
+		"presentation_id": presentationID,
+		"find":            find,
+		"replace":         replacement,
+		"occurrences":     occurrences,
+	})
 }
 
 func (r *registry) slidesReplaceShapesWithImage(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

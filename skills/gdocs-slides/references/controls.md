@@ -63,6 +63,7 @@ shape with one), `gdocs_slides_create_line`, `gdocs_slides_insert_image`,
 | To change | Read with | Write with |
 |---|---|---|
 | the words | `gdocs_slides_inspect_text_structure` | `gdocs_slides_set_text`, `gdocs_slides_set_list` |
+| one word, marker or date across the whole deck | `gdocs_slides_list` (to see where it appears) | `gdocs_slides_replace_text` — keeps the styling around it, and reports how many places it changed |
 | a list of any depth | `inspect_text_structure` (`nesting_level`) | `set_list` (lines with their levels; `plain_first_line` keeps the first line out of the list) |
 | size, font, weight, italics, colour, background, caps, super/subscript | `inspect_text_structure` (paragraph fields and `runs`) | `gdocs_slides_set_text_style` |
 | giving a field back to the layout | `inspect_text_structure` (absent field = inherited) | `gdocs_slides_reset_text_style` |

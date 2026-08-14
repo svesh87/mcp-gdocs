@@ -362,6 +362,17 @@ func TestSlidesExtraSendsWhatTheApiTakes(t *testing.T) {
 			want: []string{"replaceImage", "CENTER_CROP"},
 		},
 		{
+			// One emoji swapped across a whole deck of panels: the words around it keep
+			// their styling, which is the only reason this is not gdocs_slides_set_text.
+			name: "text replaced across the deck",
+			call: func(h *harness) (*mcp.CallToolResult, error) {
+				return h.registry.slidesReplaceText(context.Background(), request(map[string]any{
+					"presentation_id": "deck", "find": "✅", "replace": "🍬",
+				}))
+			},
+			want: []string{"replaceAllText", `"text": "✅"`, `"replaceText": "🍬"`},
+		},
+		{
 			name: "shapes into pictures",
 			call: func(h *harness) (*mcp.CallToolResult, error) {
 				return h.registry.slidesReplaceShapesWithImage(context.Background(), request(map[string]any{

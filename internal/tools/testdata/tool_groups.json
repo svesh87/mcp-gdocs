@@ -149,6 +149,7 @@
     "gdocs_slides_replace_image",
     "gdocs_slides_replace_shapes_with_chart",
     "gdocs_slides_replace_shapes_with_image",
+    "gdocs_slides_replace_text",
     "gdocs_slides_reset_text_style",
     "gdocs_slides_route_line",
     "gdocs_slides_set_alt_text",

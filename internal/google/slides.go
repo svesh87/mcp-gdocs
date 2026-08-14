@@ -244,6 +244,7 @@ type Request struct {
 	InsertTableColumns          *InsertTableColumnsRequest          `json:"insertTableColumns,omitempty"`
 	UnmergeTableCells           *UnmergeTableCellsRequest           `json:"unmergeTableCells,omitempty"`
 	UpdateTableBorder           *UpdateTableBorderRequest           `json:"updateTableBorderProperties,omitempty"`
+	ReplaceAllText              *ReplaceAllTextRequest              `json:"replaceAllText,omitempty"`
 	ReplaceImage                *ReplaceImageRequest                `json:"replaceImage,omitempty"`
 	ReplaceShapesWithImage      *ReplaceShapesWithImageRequest      `json:"replaceAllShapesWithImage,omitempty"`
 	ReplaceShapesWithChart      *ReplaceShapesWithChartRequest      `json:"replaceAllShapesWithSheetsChart,omitempty"`
@@ -315,6 +316,16 @@ type ReplaceShapesWithImageRequest struct {
 	ContainsText  *SlidesTextMatch `json:"containsText"`
 	ImageURL      string           `json:"imageUrl"`
 	Method        string           `json:"imageReplaceMethod,omitempty"`
+	PageObjectIDs []string         `json:"pageObjectIds,omitempty"`
+}
+
+// ReplaceAllTextRequest swaps one stretch of text for another wherever it appears in a
+// deck. The words around it keep their styling and so does the replacement, which is what
+// makes this the way to change a word everywhere: replacing a box's whole text takes the
+// paragraphs' styling with it.
+type ReplaceAllTextRequest struct {
+	ContainsText  *SlidesTextMatch `json:"containsText"`
+	ReplaceText   string           `json:"replaceText"`
 	PageObjectIDs []string         `json:"pageObjectIds,omitempty"`
 }
 
@@ -839,6 +850,11 @@ type BatchReply struct {
 	DuplicateObject *struct {
 		ObjectID string `json:"objectId"`
 	} `json:"duplicateObject,omitempty"`
+	// ReplaceAllText answers with a count rather than an identifier: nothing was created,
+	// and the number is the only way a caller learns that its search text matched nothing.
+	ReplaceAllText *struct {
+		OccurrencesChanged int `json:"occurrencesChanged"`
+	} `json:"replaceAllText,omitempty"`
 }
 
 // Presentation is a deck as far as this server reads it.

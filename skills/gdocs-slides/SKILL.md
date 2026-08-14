@@ -77,6 +77,45 @@ avoids rework:
    the list is made, and making the list again clears the paragraph's spacing;
 6. links, speaker notes.
 
+### Decide for each thing: the layout or the slide
+
+Everything a writing tool does to a slide it does to a layout and to the master as well —
+`create_shape`, `insert_image`, `set_page_background`, `place_element`, and removal. The
+question is not what is possible but what belongs where, and the answer decides how the deck
+ages.
+
+**On the layout** goes anything that repeats: the band across the top, the logo in it, the
+background, and — the one most often got wrong — **the grid**. Where the title sits and how
+much room the body gets are properties of the template, not of any slide. Set them on the
+layout with `place_element` and every slide that follows it moves, including the ones a
+person adds in the browser next month. Set them slide by slide and the template says one
+thing while the deck does another; the first hand-added slide shows it.
+
+**On the slide** goes only what that slide says: its text, its own picture, panels whose
+number and colour change from slide to slide.
+
+Two consequences worth knowing before starting:
+
+- A layout can be *added to* freely, and its own elements moved and removed, but the layout
+  itself cannot be removed and no request creates a new one. The set of layouts is whatever
+  the theme came with.
+- `read_theme` reports the shapes on a layout and **not the pictures**. A logo placed there
+  is invisible to every reading; note it somewhere the next agent will look, because the
+  deck will not tell them.
+
+### Multiplying a shape the API cannot build
+
+A panel with the author's corner radius, or anything else carrying adjustment values, arrives
+once — a person pastes it in the browser. From there the instinct is to duplicate the shape,
+and that is the slow way: `duplicate` puts the copy on the same page, always, so a deck
+needing that panel on nine slides would need nine pastes.
+
+Duplicate the **slide** instead. A slide copy carries every element with it, adjustment
+values included, and one paste covers the whole deck: build the first slide properly, copy
+it as many times as there are slides of that kind, then edit each copy's geometry, colours
+and words. Cheaper by an order of magnitude, and every panel in the deck is provably the
+same shape.
+
 ## 4. Check with numbers, not with a glance
 
 Two slides side by side hide exactly the differences that matter: a paragraph four points
@@ -96,6 +135,21 @@ The order that converges fastest, each step feeding the one after it:
 
 A slide at zero per cent is a slide nobody can tell apart from the sample. Anything above
 one per cent has a reason worth naming.
+
+### When there is no sample: check the deck against itself
+
+A deck built from scratch — a template, or a first deck of its kind — has nothing to diff
+against, and the question changes from "does this match" to "do these twenty look like one
+deck". That is not visible one slide at a time.
+
+Render the whole deck at one size and put every slide on a single sheet, small, in order.
+Three faults show up there and nowhere else: a title that sits lower on the slides made
+first, a panel colour used for two different meanings, and a slide still wearing the words of
+the slide it was copied from. All three are invisible while the slide fills the screen.
+
+Then measure what should be identical rather than trusting the eye: every title at the same
+`y`, every content band the same width, and no font size on any slide outside the handful the
+deck was designed with.
 
 ## When the sample's value cannot be written
 

@@ -38,6 +38,8 @@ slide is 9144000 × 5143500), **points** for font sizes and the space around par
 | what covers what | `gdocs_slides_inspect_page` (`z`) | `gdocs_slides_order_elements` |
 | elements that move together | `gdocs_slides_inspect_page` (children of a group) | `gdocs_slides_group` |
 | more of a shape the API cannot build | — | `gdocs_slides_duplicate` (same slide only) |
+| that same shape on other slides | — | `gdocs_slides_duplicate` of the **slide**: a copy carries its elements, so one pasted shape covers the deck |
+| a picture that lives on disk | — | `gdocs_drive_import_file`, `gdocs_drive_share` (`anyone`, `reader`), then `insert_image` or `set_page_background` by the download address, then `gdocs_drive_unshare` on the next call |
 
 ## An element
 

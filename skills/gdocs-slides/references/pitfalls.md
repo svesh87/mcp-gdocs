@@ -122,6 +122,49 @@ Slides fits it inside, keeping its proportions, and centres it.
 **On the slide:** a photograph smaller than its slot with white margins around it.
 **Instead:** `insert_image`, then `place_element` with the same four numbers.
 
+### Rebuilding the list throws the heading away
+`set_list` replaces everything in the box. The paragraph fields survive — indents, alignment,
+spacing, and the colour of the runs that were there — but the first line comes back as a
+plain item of the list's own styling, and `plain_first_line` only keeps it out of the list.
+
+**On the slide:** a panel whose heading is the same size and weight as the three lines under
+it, so the eye finds no way in.
+**Instead:** style after listing, not before: the whole box first (family, size, the body
+colour), then `scope=title` for the heading. On a panel copied from one of another colour,
+the inherited run colour is the giveaway — grey text in a red panel means the `all` pass was
+skipped.
+
+### Furniture put on the slide instead of the layout
+A band, a logo, a rule, a background: each one added to a slide is one that has to be added
+to the next nineteen, and moved on all twenty when it moves.
+
+**On the slide:** nothing at first — the fault appears a month later, on the first slide
+somebody adds by hand, which comes off the layout without any of it.
+**Instead:** put it on the layout's page. `create_shape`, `insert_image` and
+`set_page_background` all take a layout's identifier, and so do `place_element` and removal.
+
+### Decoration baked into a background picture
+A rule under the title, drawn into the PNG that the background is made of, cannot be nudged:
+every attempt is a new render, a new upload and a new file on the drive that the server
+cannot delete.
+
+**On the slide:** a line four points below where the title's baseline actually is, and no
+cheap way to fix it.
+**Instead:** the picture carries only what cannot be a shape — gradients, patterns, texture.
+Anything with an edge that has to line up with text is a shape on the layout, where moving it
+costs one call.
+
+### A picture that Slides never fetched
+Both `insert_image` and `set_page_background` take an address Google itself has to reach; a
+path on disk is not one, and neither is a file on a drive that nobody may read.
+
+**On the slide:** the call fails outright, or — worse — succeeds against a stale address and
+the deck keeps a broken picture.
+**Instead:** upload, open the file to anyone with the link, insert, and close the link again
+**on the very next call**. Slides fetches the picture once and keeps its own copy, so the
+grant is needed for one request and no longer. Leaving it open is how a private deck's
+artwork ends up readable by anyone who guessed the address.
+
 ---
 
 ## Right look, wrong numbers
@@ -173,10 +216,23 @@ that shape type comes out with corners six times rounder. Nothing reports the ra
 nothing accepts it.
 
 **Instead:** draw the candidates at the sample's real size and keep the closest — a plain
-`RECTANGLE` was twelve pixels off against ninety for anything rounded. Or have a person
-paste the shape in from the sample and multiply it with `gdocs_slides_duplicate`, which
-keeps everything the API cannot name. The paste is per slide: no API moves an element to
-another slide, or into another presentation.
+`RECTANGLE` was twelve pixels off against ninety for anything rounded. Or have a person paste
+the shape in from the sample: a pasted shape carries everything the API cannot name.
+
+Multiply it by duplicating the **slide**, not the shape. `duplicate` puts a copy of an
+element on the same page and no request moves one to another slide, so multiplying the shape
+means one paste per slide; a slide copy carries its elements with it, so one paste covers the
+whole deck. Build the first slide of that kind completely, then copy it and edit the copies.
+
+### Pictures on a layout or the master are not reported
+`read_theme` walks the elements of every layout and keeps the shapes. A picture there — a
+logo in the band, most often — is dropped: no address, no size, no hint that it exists.
+
+**On the slide:** a reading that says the template is empty where a person plainly sees a
+logo, and a rebuild that quietly loses it.
+**Instead:** get the file from wherever it actually lives — a brand asset, or the media
+folder of a PPTX export — and put it back with `insert_image` on the layout. Record that it
+is there, because the next reading will not say so.
 
 ### Text insets — the padding between a box's border and its text
 Default 91440 EMU on each side; an author can set them to zero, and nothing reports it.

@@ -103,6 +103,35 @@ Two consequences worth knowing before starting:
   is invisible to every reading; note it somewhere the next agent will look, because the
   deck will not tell them.
 
+### Finish the whole theme before touching a single slide
+
+When the job is a deck's *look* — a template, a restyle, a seasonal variant — the theme is
+built first and completely, and only then do the slides get touched. Not "the layouts this
+deck happens to use": **every layout the theme carries**, and the master.
+
+A theme comes with about twelve layouts and a deck of twenty slides usually stands on four or
+five of them. The other seven look unused, and they are not: the first slide somebody adds by
+hand next month comes off one of them — "Заголовок и два столбца", "Один столбец", "Чистый" —
+and it lands with the master's flat background instead of the deck's, in a colour nothing else
+on the deck uses. Nobody reads that as "an unstyled layout"; they read it as the deck being
+broken. Six extra `set_page_background` calls at the start are the whole price of not having
+that happen.
+
+The order that works, and why it is this order:
+
+1. **The palette**, `set_theme_colors`. Everything painted by name follows it, so it goes
+   first and nothing has to be repainted after.
+2. **The master** — the title's colour and the body's, by palette name. Every layout inherits
+   from it, so a colour set here is a colour not set eleven more times.
+3. **Every layout**: background, and whatever the layout's own placeholders override. The
+   ones the deck uses today and the ones it does not.
+4. **The slides**: panels, tables, words. Last, because until the theme is finished there is
+   nothing stable to check them against.
+
+Doing it in the other order — slides first, theme after — costs the work twice: the panels get
+painted against a look that then changes under them, and the difference shows up as a slide
+that is nearly right, which is the expensive kind of wrong.
+
 ### A colour by value, or a colour by name
 
 Every fill, outline and letter can be painted either with a value or with a name from the
@@ -160,6 +189,20 @@ The shape that works:
    originals' object identifiers — the same `cardRed01` addresses the panel in every deck of
    the series — so the same short sequence of calls fills in any month, and a fix to the base
    can be replayed across the variants without reading each one back.
+
+Two more things the variants need, and one place to put them:
+
+- **The markers belong to the season too.** A heading that opens with an emoji is read marker
+  first, words second — so a rocket in a Halloween deck argues with the background louder than
+  any colour does. Swap them with `replace_text`, one call per pair, keeping the meaning:
+  "done", "problem", "next" are recognised by their place in the layout, and the season only
+  dresses them. Watch for a marker used in two roles — replace the longer phrase first, or the
+  second role gets the first one's costume.
+- **Say what the theme is, in the title slide's speaker notes.** The deck travels to people
+  without whoever built it; a note travels inside the file, and a plan in a scratch directory
+  does not. One paragraph: what the picture is made of, what changes by the final slide, which
+  markers the season uses. A year later that paragraph is the only reason anybody knows why
+  February's dial has twenty-eight lamps.
 
 Two consequences worth knowing before the second variant:
 

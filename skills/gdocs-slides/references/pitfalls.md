@@ -101,14 +101,18 @@ Writing `font_family` alone is discarded when the value equals what is inherited
 reads visibly narrower.
 **Instead:** always send `font_weight` with `font_family`.
 
-### A bullet's colour is frozen at the moment the list is made
-The marker takes the colour of the text under it when `bullet_preset` runs, and keeps it.
+### A bullet takes its colour from the text when the list is made
+The marker copies the colour of the words under it at the moment `bullet_preset` runs.
 
 **On the slide:** turquoise markers beside grey ones, because the list was made while the
 first words were a link.
 **Instead:** `remove_bullets`, colour the text the way the marker should look, make the list
 again, then put the runs' colours back. Making the list again **clears the paragraph's
 spacing** — write it afterwards, never before.
+
+This is about the moment of creation, not a lock: a later `set_text_style` over the paragraphs
+takes the markers with it — measured on a deck whose bullets moved from a literal to a palette
+name along with the words. What it cannot do is give the marker a colour of its own.
 
 ### Text typed into an empty cell arrives in the default font
 **On the slide:** one cell in Arial among twenty in Rubik.
@@ -173,7 +177,19 @@ somebody adds by hand, which comes off the layout without any of it.
 **Instead:** put it on the layout's page. `create_shape`, `insert_image` and
 `set_page_background` all take a layout's identifier, and so do `place_element` and removal.
 
-### Decoration baked into a background picture
+### A background drawn in a page script, with a variable named after a window property
+Backgrounds are drawn as HTML and rendered headless, and a loop that builds shapes usually
+wants a variable for the running edge. Call it `top` at the top level of the script and the
+assignment goes nowhere: `top` is `window.top`, read-only, so the value stays the window and
+the path comes out as `M2040 [object Window] L2320 NaN`. Same for `name`, `length`, `status`,
+`self`, `parent`. Inside a function it shadows correctly, which is why the same word works in
+one place and fails in another.
+
+**On the slide:** the shape is simply absent — no error, no warning, and a picture that looks
+finished until somebody notices the layer that never appeared.
+**Instead:** name it `edge`, `y0`, anything of your own. To check a render that came out
+emptier than expected, dump the DOM (`--dump-dom`) and look at the generated `d` attributes:
+`NaN` and `[object Window]` say it at once.
 A rule under the title, drawn into the PNG that the background is made of, cannot be nudged:
 every attempt is a new render, a new upload and a new file on the drive that the server
 cannot delete.

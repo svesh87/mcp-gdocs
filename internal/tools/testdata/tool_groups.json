@@ -140,9 +140,7 @@
     "gdocs_slides_list",
     "gdocs_slides_list_layouts",
     "gdocs_slides_read_table",
-    "gdocs_slides_read_theme",
-    "gdocs_slides_set_list",
-    "gdocs_slides_set_theme_colors"
+    "gdocs_slides_read_theme"
   ],
   "slides-write": [
     "gdocs_slides_add_sheets_chart",
@@ -170,12 +168,14 @@
     "gdocs_slides_reset_text_style",
     "gdocs_slides_route_line",
     "gdocs_slides_set_alt_text",
+    "gdocs_slides_set_list",
     "gdocs_slides_set_page_background",
     "gdocs_slides_set_paragraph_style",
     "gdocs_slides_set_speaker_notes",
     "gdocs_slides_set_table_borders",
     "gdocs_slides_set_text",
     "gdocs_slides_set_text_style",
+    "gdocs_slides_set_theme_colors",
     "gdocs_slides_style_image",
     "gdocs_slides_style_layout",
     "gdocs_slides_style_shape",

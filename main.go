@@ -141,17 +141,44 @@ func serve(cfg *config.Config) error {
 		// One process, several windows on it: /mcp is the whole set, and each family
 		// has a path of its own so a project that needs one of them does not carry the
 		// other ninety tool descriptions in its context.
-		servers := map[string]*server.MCPServer{transport.MCPPath: mcpServer}
+		perPath := map[string]map[tools.Group]bool{transport.MCPPath: groups}
 		for _, family := range tools.Families() {
-			narrowed, err := newToolServer(cfg, provider, tools.Narrow(groups, family))
-			if err != nil {
-				return err
+			perPath[transport.MCPPath+"/"+family] = tools.Narrow(groups, family)
+		}
+
+		// And behind each window, a second server for connections that say they can cope
+		// with a tool list that grows. It offers the same tools through the same
+		// configuration — the ceiling is still --tools, and the window is still the
+		// window — but a few at a time.
+		servers := map[string]*server.MCPServer{transport.MCPPath: mcpServer}
+		discovery := map[string]*server.MCPServer{}
+
+		for path, allowed := range perPath {
+			full := mcpServer
+			if path != transport.MCPPath {
+				// A family window keeps two of Drive's readings — finding a file by name
+				// and asking what it is — because a bridge that reads a workbook from a
+				// slides window is no use if the workbook cannot be found first. Only
+				// where drive-read was allowed at all: this widens a window, not the
+				// ceiling.
+				var alsoOffer []string
+				if groups[tools.DriveRead] {
+					alsoOffer = tools.WindowDriveReads()
+				}
+
+				full, err = newToolServer(cfg, provider, allowed, alsoOffer...)
+				if err != nil {
+					return err
+				}
+				servers[path] = full
 			}
-			servers[transport.MCPPath+"/"+family] = narrowed
+
+			narrow, _ := tools.NarrowFrom(full, tools.DiscoveryGroups(allowed))
+			discovery[path] = narrow
 		}
 
 		pages := auth.NewWebLogin(authenticator, cfg.AuthToken).Handlers()
-		return transport.ServeHTTP(servers, cfg.Address, cfg.AuthToken, pages)
+		return transport.ServeHTTP(servers, discovery, cfg.Address, cfg.AuthToken, pages)
 	}
 
 	served := make(chan error, 1)
@@ -167,7 +194,8 @@ func serve(cfg *config.Config) error {
 
 // newToolServer builds one MCP server offering one set of tool groups. Several of them
 // share everything else: the same client provider, the same token, the same sign-in.
-func newToolServer(cfg *config.Config, provider tools.Clients, groups map[tools.Group]bool) (*server.MCPServer, error) {
+func newToolServer(cfg *config.Config, provider tools.Clients, groups map[tools.Group]bool,
+	alsoOffer ...string) (*server.MCPServer, error) {
 	mcpServer := server.NewMCPServer("mcp-gdocs", version, server.WithToolCapabilities(true))
 
 	if err := tools.Register(mcpServer, tools.Options{
@@ -175,6 +203,7 @@ func newToolServer(cfg *config.Config, provider tools.Clients, groups map[tools.
 		AllowWrite: cfg.AllowWrite,
 		FilesDir:   cfg.FilesDir,
 		Groups:     groups,
+		AlsoOffer:  alsoOffer,
 	}); err != nil {
 		return nil, err
 	}

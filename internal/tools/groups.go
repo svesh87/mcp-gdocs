@@ -64,6 +64,9 @@ const (
 // belongs to no family is either one of these or a mistake, and a mistake should fail.
 var commonTools = map[string]bool{
 	"gdocs_reference": true,
+	// The tool that hands the others out belongs to no family either, and is offered only
+	// on a connection that asked for discovery.
+	"gdocs_find_tools": true,
 }
 
 // allGroups is every group there is, in the order they are reported.
@@ -121,6 +124,22 @@ var readingVerbs = []string{
 	"colors", "structure",
 }
 
+// writingVerbs are the words that make a tool a writing one whatever else its name contains,
+// and they are checked first.
+//
+// They exist because two of the reading words above are also ordinary objects. A tool called
+// set_list writes a list and a tool called set_theme_colors replaces the deck's palette, and
+// both landed in slides-read on the strength of the words "list" and "colors" — so
+// --tools=slides-read, which an operator chooses in order to change nothing, handed over two
+// tools that change a deck. The verb a name starts with is what it does; the rest of the name
+// is what it does it to.
+var writingVerbs = []string{
+	"set", "add", "create", "insert", "update", "replace", "append", "write", "make",
+	"style", "fill", "place", "order", "group", "reorder", "hide", "link", "duplicate",
+	"protect", "collapse", "split", "trim", "auto", "move", "shape", "paste", "route",
+	"refresh", "reset", "copy", "import", "rename", "restore", "keep", "share", "unshare",
+}
+
 // GroupOf works out which group a tool belongs to from its name.
 //
 // Deriving it rather than declaring it at every registration keeps one truth instead of
@@ -144,15 +163,20 @@ func GroupOf(name string) (Group, error) {
 		return DriveShare, nil
 	}
 
+	verb, _, _ := strings.Cut(rest, "_")
+
 	class := "write"
 	switch {
 	case strings.Contains(rest, "delete"):
 		class = "delete"
 	case strings.Contains(rest, "copy") && !fileCopyTools[name]:
 		class = "copy"
+	case isWritingVerb(verb):
+		// Already write, and said out loud: this case is what stops a reading word further
+		// along the name from turning a writing tool into a reading one.
 	default:
-		for _, verb := range readingVerbs {
-			if strings.Contains(rest, verb) {
+		for _, reading := range readingVerbs {
+			if strings.Contains(rest, reading) {
 				class = "read"
 				break
 			}
@@ -167,6 +191,17 @@ func GroupOf(name string) (Group, error) {
 	}
 
 	return "", fmt.Errorf("the tool name %q lands in %q, which is not a group", name, group)
+}
+
+// isWritingVerb says whether a name begins with a word that means "this changes something".
+func isWritingVerb(verb string) bool {
+	for _, writing := range writingVerbs {
+		if verb == writing {
+			return true
+		}
+	}
+
+	return false
 }
 
 // defaultGroups is the set a server offers when nothing was asked for: everything except
@@ -284,6 +319,20 @@ func GroupNames() []string { return groupNames() }
 // Families lists the families a set can be narrowed to, which is also the list of
 // sub-paths the HTTP transport serves.
 func Families() []string { return familyNames() }
+
+// WindowDriveReads are the two Drive tools every family window keeps: finding a file by name
+// and asking what it is.
+//
+// The list is two names long on purpose. A window on slides needs to find the workbook a
+// bridge is about to read, and to check that an identifier is the file somebody meant — and
+// nothing beyond that. Comments, revisions, permissions and the folder listing are Drive's own
+// job and stay behind /mcp/drive, where an operator who wanted them said so.
+//
+// They appear only where the configuration allowed drive-read at all: this widens a window,
+// never the ceiling.
+func WindowDriveReads() []string {
+	return []string{"gdocs_drive_search", "gdocs_drive_file_info"}
+}
 
 // Narrow keeps only the groups of one family, and always the common ones.
 //

@@ -40,6 +40,47 @@ Replacing a paragraph's text drops the links inside it.
 someone tries it.
 **Instead:** read `links` before writing, put them back with `gdocs_slides_link_text`.
 
+### A clone's elements have identifiers of their own
+`gdocs_slides_copy_slide` and `gdocs_slides_duplicate` answer with the new **page's**
+identifier and nothing else. Google invents fresh identifiers for every element on the copy,
+and the tool does not report the correspondence, so the template's `cardRed01` still addresses
+the panel on the **original** slide.
+
+**On the slide:** the worst kind — nothing appears on the slide you were building, and the
+slide you finished an hour ago quietly loses its text to yours. Every call succeeds. Found by
+looking at a render, or not at all.
+**Instead:** clone, then `inspect_page` on the copy, and work only with the identifiers that
+reading gives. Five extra readings for a series of five slides, and they are the price of
+knowing which slide you are writing to. Pair the elements up by position on the slide, the
+same way a comparison does.
+
+### A chart on a slide is a drawing of the moment it was put there
+A linked chart is not a window onto the workbook. It holds the picture Slides drew when the
+element was created, and editing the numbers behind it changes nothing until
+`gdocs_slides_refresh_sheets_chart` is called for that element.
+
+**On the slide:** the most dangerous entry on this page, because there is nothing to see. The
+chart is drawn properly, the axes are right, the labels are there — and it is last month.
+Nobody reviewing the deck can tell, and the numbers beside it in the text will have been
+updated.
+**Instead:** refresh every chart element as the last step before handing the deck over, then
+look at the renders — a refresh brings across everything that changed in the workbook, not
+only the change you had in mind. A chart that will never need refreshing again should go in
+as a picture (`linked: false`), so that the question stops existing.
+
+### A chart draws the rows it was made with, and the sheet growing does not grow it
+A chart's series is an absolute rectangle — `start_row`, `end_row`, `value_columns` — fixed
+when it was created. Writing an eighth row under seven does not extend it, and neither does
+`refresh_sheets_chart`: the refresh faithfully redraws the same seven rows.
+
+**On the slide:** a chart that looks completely normal and is missing a category. Caught by
+nothing except adding the chart's bars up and comparing with the table — 110 where the
+workbook says 120. No error, no gap, no stub column.
+**Instead:** after every row added to the data, `gdocs_sheets_update_chart` with
+`value_columns` and the new `end_row`. Changing the range keeps the chart's number, so every
+slide showing it keeps working; drawing the chart again gets a new number and leaves them
+pointing at nothing. And check the total against the table rather than the slide.
+
 ---
 
 ## Right content, wrong look
@@ -118,6 +159,19 @@ name along with the words. What it cannot do is give the marker a colour of its 
 **On the slide:** one cell in Arial among twenty in Rubik.
 **Instead:** style the cells after filling them.
 
+### A newline is not a list
+`gdocs_slides_set_text` with `\n` between the items gives exactly what was asked for:
+paragraphs. Paragraphs are not a list — no marker, no hanging indent, no space between the
+items — and the answer cannot show it, because the character count is right.
+
+**On the slide:** a panel of running text where the sample has three bullets. Legible on a
+laptop at arm's length and unreadable from the back of a room, which is where it gets noticed.
+**Instead:** the rule is by shape, not by feel — **more than one item means
+`gdocs_slides_set_list`, and `set_text` is for a caption, a number, a single line.** A panel
+whose first line is a heading takes `plain_first_line: true`: the heading stays an ordinary
+paragraph and everything under it becomes a real list. Writing "•" or "—" into the text
+yourself is the third way and the worst one; it is what produces decks with drifting indents.
+
 ### A shape with no text is still an element
 The panel behind the text, the white card under a chart, the block under a QR code.
 
@@ -130,6 +184,21 @@ Slides fits it inside, keeping its proportions, and centres it.
 
 **On the slide:** a photograph smaller than its slot with white margins around it.
 **Instead:** `insert_image`, then `place_element` with the same four numbers.
+
+### Replacing a shape with a chart eats the shape
+`gdocs_slides_replace_shapes_with_chart` and `replace_shapes_with_image` take the shape's place
+and size and **remove the shape**. The word "replace" is exact and the instinct is wrong: you
+are not filling a frame, you are deleting it. The answer's `shapes_replaced` counts what was
+consumed.
+
+**On the slide:** the chart stands as a bare rectangle among panels with the author's corner
+radius, on a slide where every other block is rounded. Nothing failed; the frame is simply
+gone, and it cannot be built again — its radius is an adjustment value no request writes.
+**Instead:** when the frame matters, do not replace it. `gdocs_slides_duplicate` a neighbouring
+panel on the same slide, `set_text` it to a single space, `place_element` into the frame's
+geometry, `order_elements` `SEND_TO_BACK`, and put the chart on top inset by about 76200 EMU
+(6 pt) a side. Five calls that keep the deck's own shape; `replace_shapes_with_chart` is for a
+template placeholder nobody will miss.
 
 ### Rebuilding the list throws the heading away
 `set_list` replaces everything in the box. The paragraph fields survive — indents, alignment,

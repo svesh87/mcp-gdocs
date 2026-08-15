@@ -62,7 +62,7 @@ shape with one), `gdocs_slides_create_line`, `gdocs_slides_insert_image`,
 
 | To change | Read with | Write with |
 |---|---|---|
-| the words | `gdocs_slides_inspect_text_structure` | `gdocs_slides_set_text`, `gdocs_slides_set_list` |
+| the words | `gdocs_slides_inspect_text_structure` | `gdocs_slides_set_text` for a line, `gdocs_slides_set_list` for anything with more than one item |
 | one word, marker or date across the whole deck | `gdocs_slides_list` (to see where it appears) | `gdocs_slides_replace_text` — keeps the styling around it, and reports how many places it changed |
 | a list of any depth | `inspect_text_structure` (`nesting_level`) | `set_list` (lines with their levels; `plain_first_line` keeps the first line out of the list) |
 | size, font, weight, italics, colour, background, caps, super/subscript | `inspect_text_structure` (paragraph fields and `runs`) | `gdocs_slides_set_text_style` |
@@ -98,28 +98,38 @@ the frame comes out even instead of showing seams where two cells disagreed.
 |---|---|---|
 | swap a picture's content, keeping place and crop | `gdocs_slides_replace_image` | the only way to change a picture already on a slide |
 | turn every shape whose text matches into a picture | `gdocs_slides_replace_shapes_with_image` | a template marked `{{photo}}` becomes an illustrated deck in one call |
-| the same with a chart from a workbook | `gdocs_slides_replace_shapes_with_chart` | |
-| a chart from a workbook, placed by hand | `gdocs_slides_add_sheets_chart` | linked, it can be brought up to date later |
+| the same with a chart from a workbook | `gdocs_slides_replace_shapes_with_chart` | the shape itself does not survive it — see pitfalls |
+| a chart from a workbook, placed by hand | `gdocs_slides_add_sheets_chart` | `linked: true` by default; `linked: false` puts it in as a picture, in one call |
 | bring a linked chart up to date | `gdocs_slides_refresh_sheets_chart` | a deck built last quarter shows last quarter's numbers until this is called |
-| turn a linked chart into a picture | read `content_url` from `gdocs_slides_inspect_page`, then `gdocs_slides_insert_image` | the deck stops depending on the workbook |
+| bake a chart that is already on the slide linked | read `content_url` from `gdocs_slides_inspect_page`, then `gdocs_slides_insert_image` | five calls; only for a linked chart already worth keeping |
+| a video from YouTube or Drive | `gdocs_slides_add_video` | with autoplay, mute, start and end |
+| the description a screen reader reads out | `gdocs_slides_set_alt_text` | nothing else writes it |
+| how a connector runs, and rerouting it | `gdocs_slides_route_line` | a connector drawn before its shapes were placed stays where it was drawn until this is called |
 
 **Linked or baked is a decision about the deck's life, not about looks.** A linked chart
 follows its workbook, which is right while the numbers are still moving and wrong for a deck
 that will be opened in a year or sent outside the company: the reader has no access to the
 workbook, and the chart is a broken box. Baking it into a picture cuts that tie.
 
-The order matters, because a picture freezes whatever was there: put the chart in linked,
-finish its look, `refresh_sheets_chart`, *then* read `content_url` and insert it as an image,
-and only then remove the linked one. Get the order wrong and unfinished styling becomes
-indistinguishable from the styling you meant.
+**Decide it before inserting, and it costs one call.** `gdocs_slides_add_sheets_chart` takes
+`linked: false`, and that is not a lesser version of the linked one — it is the picture, drawn
+from the chart as it stands at that moment. The answer says which one arrived:
+`"linking_mode": "NOT_LINKED_IMAGE"`. So the whole sequence for a deck that must not depend on
+its workbook is: finish the chart **in the workbook** — colours, labels, title, range — then
+insert it once, unlinked.
+
+The five-call route exists for the other case, and only for it: a chart **already** standing on
+the slide linked and already styled, where re-inserting would mean doing that styling again.
+Then the order is the whole of it — `refresh_sheets_chart`, read `content_url` from the
+`sheets_chart` element via `inspect_page`, `insert_image`, place it, remove the linked one.
+Either way a picture freezes the moment: whatever is unfinished when it is taken becomes
+indistinguishable from what was meant, and a title frozen into the picture cannot be taken off
+afterwards at all.
 
 One thing the baking does for free: the frame around a chart does not render into the
-picture, so a chart whose border was still drawn comes out clean. That is not a reason to
-skip `no_border` on a chart that stays linked — it is a reason not to spend time on the
-border of one you are about to bake.
-| a video from YouTube or Drive | `gdocs_slides_add_video` | with autoplay, mute, start and end |
-| the description a screen reader reads out | `gdocs_slides_set_alt_text` | nothing else writes it |
-| how a connector runs, and rerouting it | `gdocs_slides_route_line` | a connector drawn before its shapes were placed stays where it was drawn until this is called |
+picture. Measured on renders — the edge strokes were gone even on charts whose border was
+still painted the panel's colour. So `no_border` treats an illness only a *linked* chart has;
+on one that is going in as a picture, the border is not worth a call.
 
 ## Bringing content in from another document
 

@@ -48,6 +48,12 @@ below are the ones that are expensive to rediscover; the rest of the reasoning i
   a bridge carries exactly those. The consequence is deliberate and has to stay written down:
   a window on one family can now read another, so the sub-paths bound what may be **changed**
   and no longer bound what may be read.
+- **A tool's class comes from the verb its name begins with**, not from any word in it. Two
+  of the words that mean "this only reads" — `list`, `colors` — are also ordinary objects, and
+  `gdocs_slides_set_list` and `gdocs_slides_set_theme_colors` both sat in `slides-read` on
+  their strength: a configuration chosen in order to change nothing handed over two tools that
+  change a deck. `writingVerbs` in `groups.go` is checked before the reading words, and two
+  tests hold the line — one over every registered tool, one from the operator's side.
 - **No service account, no domain-wide delegation.** The server acts as the person who
   signed in, and nothing else. The reasoning is in `docs/SETUP.md`; it is not a default
   to revisit casually.

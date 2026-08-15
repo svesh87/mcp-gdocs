@@ -77,7 +77,33 @@ func TestHandlerRoutes(t *testing.T) {
 	handler := NewHandler(map[string]*server.MCPServer{
 		MCPPath:             mcpServer,
 		MCPPath + "/slides": server.NewMCPServer("test", "0.0.0"),
-	}, "secret", pages)
+	}, nil, "secret", pages)
+
+	// The discovery switch is read before anything else looks at the request, and it has to
+	// be readable both ways: some clients let a person set only a URL, some only headers.
+	for _, probe := range []struct {
+		name   string
+		target string
+		header string
+		want   bool
+	}{
+		{name: "nothing said", target: MCPPath, want: false},
+		{name: "in the address", target: MCPPath + "?discovery=1", want: true},
+		{name: "spelled out", target: MCPPath + "?discovery=on", want: true},
+		{name: "turned off in the address", target: MCPPath + "?discovery=0", want: false},
+		{name: "in a header", target: MCPPath, header: "on", want: true},
+		{name: "turned off in a header", target: MCPPath, header: "false", want: false},
+	} {
+		t.Run(probe.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, probe.target, nil)
+			if probe.header != "" {
+				request.Header.Set(DiscoveryHeader, probe.header)
+			}
+			if got := WantsDiscovery(request); got != probe.want {
+				t.Errorf("WantsDiscovery = %v, want %v", got, probe.want)
+			}
+		})
+	}
 
 	// Health carries no token: the image is built FROM scratch, and a container
 	// healthcheck has no shell to read one with.
@@ -99,6 +125,20 @@ func TestHandlerRoutes(t *testing.T) {
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, MCPPath, strings.NewReader("{}")))
 	if recorder.Code != http.StatusUnauthorized {
 		t.Errorf("the MCP endpoint should demand a token, got %d", recorder.Code)
+	}
+
+	// A connection that asks for discovery is answered by a different server on the same
+	// path — and it is behind the same token, because it is the same server seen another way.
+	withDiscovery := NewHandler(
+		map[string]*server.MCPServer{MCPPath: mcpServer},
+		map[string]*server.MCPServer{MCPPath: server.NewMCPServer("narrow", "0.0.0")},
+		"secret", nil)
+
+	recorder = httptest.NewRecorder()
+	withDiscovery.ServeHTTP(recorder,
+		httptest.NewRequest(http.MethodPost, MCPPath+"?discovery=1", strings.NewReader("{}")))
+	if recorder.Code != http.StatusUnauthorized {
+		t.Errorf("the discovery endpoint should demand a token too, got %d", recorder.Code)
 	}
 
 	// A family's own path is a second window on the same process, and it is guarded the

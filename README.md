@@ -104,6 +104,42 @@ just the one it needs:
 They are windows on one server — same sign-in, same token, same token store — and a
 window cannot show what `--tools` did not allow.
 
+Every family window also carries two of Drive's readings, `gdocs_drive_search` and
+`gdocs_drive_file_info`, where the configuration allowed `drive-read` at all. A tool on the
+slides path can read a workbook, and a workbook nobody can find by name is one nobody can
+name the identifier of. Only those two: comments, revisions, permissions and the folder
+listing are Drive's own job and stay behind `/mcp/drive`.
+
+There is no second axis — no `/mcp/drive/read`. A project that needs one family read-only and
+another writable is better served by a second process with its own `--tools` than by a
+crossing of two dimensions that has to be explained every time it is read.
+
+## Asking for tools instead of carrying them
+
+A window still hands over every name in it at connection time. A connection can instead start
+with the reference, the readings and one more tool, and ask for the rest as it needs them:
+
+```
+"url": "http://127.0.0.1:8819/mcp?discovery=1"
+```
+
+or the same thing as a header, `X-Gdocs-Discovery: on`, for a client that lets a person set
+headers rather than a URL. Then `gdocs_find_tools` takes a few words — "nested list", "picture
+as a slide background", "copy a tab into another workbook" — and adds what matches to **that
+connection**, for the rest of the session. Another client on the same path is unaffected.
+
+Saying nothing gets everything, and that is the point of putting the switch on the client
+rather than on the server: it only works with a client that re-reads its tool list when the
+server says the list changed. Claude Code does. Codex, as far as anyone has been able to
+establish, does not — a list taken at connection time stays — so a server that always started
+narrow would be one Codex could not write with. The client that knows it can cope says so; the
+one that cannot says nothing and is given everything.
+
+Two things never change with the switch. `--tools` is still the ceiling: discovery hands out
+what the configuration allowed and nothing else. And removal never arrives by asking, whatever
+`--tools` allowed — a tool that appears because an agent named it is the agent's decision,
+while removal is the operator's, made once at startup.
+
 ## Tools
 
 A hundred and forty-nine of them, covering every request the three APIs have except the

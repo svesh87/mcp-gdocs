@@ -68,6 +68,13 @@ type Options struct {
 	// means the default set: everything except removal and sharing, which is what the
 	// server offered before groups existed.
 	Groups map[Group]bool
+	// AlsoOffer are tool names kept even though their group is not in Groups.
+	//
+	// It exists for one case and should stay that small: a window on one family needs to
+	// find a file by name, and a group is too coarse to say "these two of the nine". It
+	// widens a window, never the ceiling — a caller can only put names here that the
+	// configuration already allowed.
+	AlsoOffer []string
 }
 
 type registry struct{ opts Options }
@@ -100,13 +107,19 @@ func Register(srv *server.MCPServer, opts Options) error {
 	r.registerDriveManage(srv)
 	r.registerFiles(srv)
 
-	return keepGroups(srv, opts.Groups)
+	return keepGroups(srv, opts.Groups, opts.AlsoOffer)
 }
 
-// keepGroups removes every registered tool whose group was not asked for.
-func keepGroups(srv *server.MCPServer, groups map[Group]bool) error {
+// keepGroups removes every registered tool whose group was not asked for, except the handful
+// named outright.
+func keepGroups(srv *server.MCPServer, groups map[Group]bool, alsoOffer []string) error {
 	if groups == nil {
 		groups = defaultGroups()
+	}
+
+	keep := map[string]bool{}
+	for _, name := range alsoOffer {
+		keep[name] = true
 	}
 
 	var drop []string
@@ -115,7 +128,7 @@ func keepGroups(srv *server.MCPServer, groups map[Group]bool) error {
 		if err != nil {
 			return err
 		}
-		if !groups[group] {
+		if !groups[group] && !keep[name] {
 			drop = append(drop, name)
 		}
 	}

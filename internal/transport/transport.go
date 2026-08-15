@@ -17,7 +17,41 @@ import (
 const (
 	MCPPath    = "/mcp"
 	HealthPath = "/healthz"
+
+	// DiscoveryQuery and DiscoveryHeader are how a connection says it can cope with a tool
+	// list that grows.
+	//
+	// It has to be the client's decision rather than the server's, because it depends on
+	// the client: one that re-reads its list when told to gets a small set and asks for the
+	// rest, one that does not would be left unable to call anything it was not given at
+	// connection time. Saying nothing gets everything, which is what a client that cannot
+	// answer for itself should get.
+	//
+	// Both spellings exist because clients differ in what they let a person configure: some
+	// take only a URL, some take headers as well.
+	DiscoveryQuery  = "discovery"
+	DiscoveryHeader = "X-Gdocs-Discovery"
 )
+
+// WantsDiscovery says whether a request asked for the growing tool list.
+//
+// Anything but an explicit off counts as on once the switch is present at all: a client
+// configured with ?discovery=1, =on or =true means the same thing, and guessing at the
+// spelling is not something a person should have to do to make their editor work.
+func WantsDiscovery(r *http.Request) bool {
+	for _, value := range []string{r.URL.Query().Get(DiscoveryQuery), r.Header.Get(DiscoveryHeader)} {
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case "":
+			continue
+		case "0", "off", "false", "no":
+			return false
+		default:
+			return true
+		}
+	}
+
+	return false
+}
 
 // ServeStdio hands the server to the stdio transport.
 func ServeStdio(mcpServer *server.MCPServer) error {
@@ -27,10 +61,10 @@ func ServeStdio(mcpServer *server.MCPServer) error {
 // ServeHTTP starts the streamable HTTP transport on address, behind bearer auth. Extra
 // handlers are mounted beside it — the sign-in pages, which a browser reaches and which
 // therefore cannot carry an Authorization header.
-func ServeHTTP(servers map[string]*server.MCPServer, address, token string, extra map[string]http.Handler) error {
+func ServeHTTP(servers, discovery map[string]*server.MCPServer, address, token string, extra map[string]http.Handler) error {
 	httpServer := &http.Server{
 		Addr:    address,
-		Handler: NewHandler(servers, token, extra),
+		Handler: NewHandler(servers, discovery, token, extra),
 		// Only the header deadline is set. Read and write deadlines would cut off the
 		// long-lived SSE streams this transport is built on.
 		ReadHeaderTimeout: 10 * time.Second,
@@ -47,9 +81,13 @@ func ServeHTTP(servers map[string]*server.MCPServer, address, token string, extr
 // slides path and never sees the other ninety tool descriptions — which is the whole point,
 // since every name in the listing costs the agent context on every session.
 //
+// Every path has a second server behind it for connections that asked for discovery: the
+// same tools, offered a few at a time instead of all at once. Which one answers is decided
+// per request, so two clients on the same path can be given different things.
+//
 // The sign-in, the token and the token store are shared: it is one server, seen through
 // several windows.
-func NewHandler(servers map[string]*server.MCPServer, token string, extra map[string]http.Handler) http.Handler {
+func NewHandler(servers, discovery map[string]*server.MCPServer, token string, extra map[string]http.Handler) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc(HealthPath, func(w http.ResponseWriter, _ *http.Request) {
@@ -66,10 +104,34 @@ func NewHandler(servers map[string]*server.MCPServer, token string, extra map[st
 		// endpoints from it, and a server mounted at /mcp/docs that believes it lives
 		// at /mcp hands the client an address that answers something else.
 		endpoint := server.NewStreamableHTTPServer(mcpServer, server.WithEndpointPath(path))
-		mux.Handle(path, RequireBearer(endpoint, token))
+
+		var handler http.Handler = endpoint
+		if narrow, ok := discovery[path]; ok {
+			handler = switchOnDiscovery(endpoint,
+				server.NewStreamableHTTPServer(narrow, server.WithEndpointPath(path)))
+		}
+
+		mux.Handle(path, RequireBearer(handler, token))
 	}
 
 	return mux
+}
+
+// switchOnDiscovery sends a request to whichever server the connection asked for.
+//
+// The switch is read on every request rather than once per session because that is all this
+// layer can see; the session itself is kept by whichever transport answers, and a client that
+// sets the parameter in its configuration sets it on all of its requests. A client that sets
+// it on some and not others gets two sessions, which is what it asked for.
+func switchOnDiscovery(full, narrow http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if WantsDiscovery(r) {
+			narrow.ServeHTTP(w, r)
+			return
+		}
+
+		full.ServeHTTP(w, r)
+	})
 }
 
 // RequireBearer rejects everything that does not carry the expected token.

@@ -176,6 +176,12 @@ not by a little: a chart made again gets a **new number**, so every slide showin
 one is left pointing at nothing. Adding a series or extending the window is a change, not a
 rebuild.
 
+Neither happens on its own. The range is an absolute rectangle fixed when the chart was drawn,
+so a row written under the data is simply outside it, and the chart goes on drawing the old
+rectangle — no gap, no error, no empty column. On a slide it is invisible, and the only thing
+that catches it is adding the bars up and comparing with the table. After every row added:
+`update_chart` with `value_columns` and the new `end_row`.
+
 The tool reads the chart's whole specification, alters what was named and writes it back,
 because `updateChartSpec` has no field mask — whatever is sent becomes the chart. That is
 also why the series keep their colours when the range grows.

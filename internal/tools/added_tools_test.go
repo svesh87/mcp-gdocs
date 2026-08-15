@@ -401,6 +401,73 @@ func TestUpdateChartPaintsItsBackground(t *testing.T) {
 	}
 }
 
+// TestUpdateChartTakesTheFrameOff records three live renders, because the answer is not what
+// the API's shape suggests.
+//
+// Painting the frame the colour behind it still draws it, and on a panel's rounded corner
+// that shows as thin strokes. Clearing the colour is worse than either: a border with no
+// colour comes back in Google's default dark. What works is a colour whose alpha is zero —
+// which the background of the same chart refuses outright. The two fields do not behave the
+// same way, and only a render says so.
+func TestUpdateChartTakesTheFrameOff(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).
+		answer(":batchUpdate", `{"spreadsheetId": "book", "replies": [{}]}`).
+		answer("/spreadsheets/book", spreadsheetForObjects))
+
+	h.ok(h.registry.sheetsUpdateChart(context.Background(), request(map[string]any{
+		"spreadsheet_id": "book", "chart_id": 5.0, "no_border": true,
+	})))
+
+	body := string(h.bodyOf(t, len(h.google.requests)-1))
+	for _, want := range []string{"updateEmbeddedObjectBorder", `"alpha": 0`, `"fields": "colorStyle"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the request should carry %s, got %s", want, body)
+		}
+	}
+}
+
+// TestUpdateChartRefusesBothWaysWithTheFrame: painting it and taking it off are opposite
+// instructions, and guessing which one a caller meant is how a deck ends up with a frame
+// somebody asked to remove.
+func TestUpdateChartRefusesBothWaysWithTheFrame(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).
+		answer(":batchUpdate", `{"spreadsheetId": "book", "replies": [{}]}`).
+		answer("/spreadsheets/book", spreadsheetForObjects))
+
+	message := h.fail(h.registry.sheetsUpdateChart(context.Background(), request(map[string]any{
+		"spreadsheet_id": "book", "chart_id": 5.0,
+		"no_border": true, "border_color": "#EEF2F7",
+	})))
+
+	if !strings.Contains(message, "name one") {
+		t.Errorf("the refusal should say to pick one, got %s", message)
+	}
+}
+
+// TestUpdateChartClearsATitle: an empty string is a decision, not a missing argument. A chart
+// whose name is written on the slide beside it should carry no title of its own, and dropping
+// the empty value left the old title in place while reporting success.
+func TestUpdateChartClearsATitle(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).
+		answer(":batchUpdate", `{"spreadsheetId": "book", "replies": [{}]}`).
+		answer("/spreadsheets/book", spreadsheetForObjects))
+
+	h.ok(h.registry.sheetsUpdateChart(context.Background(), request(map[string]any{
+		"spreadsheet_id": "book", "chart_id": 5.0, "title": "",
+	})))
+
+	body := string(h.bodyOf(t, len(h.google.requests)-1))
+	// The key is removed rather than sent empty: Google ignores an empty value in a
+	// specification, so sending one changes nothing at all.
+	if strings.Contains(body, `"title"`) {
+		t.Errorf("the title should be gone from the specification, got %s", body)
+	}
+	// And the chart still draws what it drew.
+	if !strings.Contains(body, `"chartType": "COLUMN"`) {
+		t.Errorf("the rest of the specification should survive, got %s", body)
+	}
+}
+
 // TestUpdateChartRefusesTransparency records what a live chart answered:
 // "chart.backgroundColorStyle.alpha not supported". The parameter exists so that the refusal
 // says so and names the way round it, rather than the caller learning it from Google's own

@@ -151,6 +151,11 @@ func newHarness(t *testing.T, fake *fakeGoogle) *harness {
 		registry: &registry{opts: Options{
 			Clients:    ClientFunc(func(context.Context) (*google.Client, error) { return client, nil }),
 			AllowWrite: true,
+			// Every group, because these tests call the handlers directly and so skip the
+			// registration that would have taken an unwanted tool back out. A handler
+			// reached at all is one whose group was allowed; a test that wants a narrower
+			// configuration says so, as the removal ones do.
+			Groups: everyGroup(),
 			// Fixed identifiers so a whole request body can be compared with a golden
 			// file; the real one is random.
 			NewObjectID: func(prefix string) string { return prefix + "_test" },

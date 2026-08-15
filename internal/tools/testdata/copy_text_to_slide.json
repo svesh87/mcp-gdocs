@@ -1,0 +1,92 @@
+{
+  "requests": [
+    {
+      "createShape": {
+        "objectId": "box_test",
+        "shapeType": "TEXT_BOX",
+        "elementProperties": {
+          "pageObjectId": "slide1",
+          "size": {
+            "width": {
+              "magnitude": 5000000,
+              "unit": "EMU"
+            },
+            "height": {
+              "magnitude": 2500000,
+              "unit": "EMU"
+            }
+          },
+          "transform": {
+            "scaleX": 1,
+            "scaleY": 1,
+            "translateX": 311700,
+            "translateY": 900000,
+            "unit": "EMU"
+          }
+        }
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "box_test",
+        "text": "Условия работы\nУдалённо\n\tГибкий график",
+        "insertionIndex": 0
+      }
+    },
+    {
+      "updateTextStyle": {
+        "objectId": "box_test",
+        "textRange": {
+          "type": "FIXED_RANGE",
+          "startIndex": 0,
+          "endIndex": 15
+        },
+        "style": {
+          "bold": true,
+          "fontFamily": "Rubik",
+          "fontSize": {
+            "magnitude": 18,
+            "unit": "PT"
+          },
+          "weightedFontFamily": {
+            "fontFamily": "Rubik",
+            "weight": 500
+          },
+          "foregroundColor": {
+            "opaqueColor": {
+              "rgbColor": {
+                "red": 0.6
+              }
+            }
+          }
+        },
+        "fields": "bold,fontFamily,fontSize,weightedFontFamily,foregroundColor"
+      }
+    },
+    {
+      "updateParagraphStyle": {
+        "objectId": "box_test",
+        "textRange": {
+          "type": "FIXED_RANGE",
+          "startIndex": 0,
+          "endIndex": 15
+        },
+        "style": {
+          "alignment": "CENTER"
+        },
+        "fields": "alignment"
+      }
+    },
+    {
+      "createParagraphBullets": {
+        "objectId": "box_test",
+        "textRange": {
+          "type": "FIXED_RANGE",
+          "startIndex": 15,
+          "endIndex": 38
+        },
+        "bulletPreset": "BULLET_DISC_CIRCLE_SQUARE"
+      }
+    }
+  ]
+}

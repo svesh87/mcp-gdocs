@@ -1,0 +1,238 @@
+{
+  "requests": [
+    {
+      "createTable": {
+        "objectId": "table_test",
+        "elementProperties": {
+          "pageObjectId": "slide1",
+          "size": {
+            "width": {
+              "magnitude": 4000000,
+              "unit": "EMU"
+            },
+            "height": {
+              "magnitude": 1500000,
+              "unit": "EMU"
+            }
+          },
+          "transform": {
+            "scaleX": 1,
+            "scaleY": 1,
+            "translateX": 500000,
+            "translateY": 1000000,
+            "unit": "EMU"
+          }
+        },
+        "rows": 3,
+        "columns": 2
+      }
+    },
+    {
+      "updateTableCellProperties": {
+        "objectId": "table_test",
+        "tableRange": {
+          "location": {
+            "rowIndex": 0,
+            "columnIndex": 0
+          },
+          "rowSpan": 1,
+          "columnSpan": 1
+        },
+        "tableCellProperties": {
+          "tableCellBackgroundFill": {
+            "solidFill": {
+              "color": {
+                "rgbColor": {
+                  "red": 0.9,
+                  "green": 0.9,
+                  "blue": 0.9
+                }
+              },
+              "alpha": 1
+            }
+          }
+        },
+        "fields": "tableCellBackgroundFill"
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 0,
+          "columnIndex": 0
+        },
+        "text": "Команда",
+        "insertionIndex": 0
+      }
+    },
+    {
+      "updateTextStyle": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 0,
+          "columnIndex": 0
+        },
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "bold": true,
+          "fontFamily": "Rubik",
+          "fontSize": {
+            "magnitude": 11,
+            "unit": "PT"
+          }
+        },
+        "fields": "bold,fontFamily,fontSize"
+      }
+    },
+    {
+      "updateParagraphStyle": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 0,
+          "columnIndex": 0
+        },
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "alignment": "START"
+        },
+        "fields": "alignment"
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 0,
+          "columnIndex": 1
+        },
+        "text": "Закрыто",
+        "insertionIndex": 0
+      }
+    },
+    {
+      "updateTextStyle": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 0,
+          "columnIndex": 1
+        },
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "bold": true,
+          "fontSize": {
+            "magnitude": 11,
+            "unit": "PT"
+          }
+        },
+        "fields": "bold,fontSize"
+      }
+    },
+    {
+      "updateParagraphStyle": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 0,
+          "columnIndex": 1
+        },
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "alignment": "END"
+        },
+        "fields": "alignment"
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 0
+        },
+        "text": "SRE",
+        "insertionIndex": 0
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 1
+        },
+        "text": "12",
+        "insertionIndex": 0
+      }
+    },
+    {
+      "updateTextStyle": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 1
+        },
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "foregroundColor": {
+            "opaqueColor": {
+              "rgbColor": {
+                "red": 0.1,
+                "green": 0.5,
+                "blue": 0.2
+              }
+            }
+          }
+        },
+        "fields": "foregroundColor"
+      }
+    },
+    {
+      "updateParagraphStyle": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 1
+        },
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "alignment": "END"
+        },
+        "fields": "alignment"
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 2,
+          "columnIndex": 0
+        },
+        "text": "QA",
+        "insertionIndex": 0
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 2,
+          "columnIndex": 1
+        },
+        "text": "18",
+        "insertionIndex": 0
+      }
+    }
+  ]
+}

@@ -54,8 +54,9 @@ func (r *registry) registerDriveManage(srv *server.MCPServer) {
 
 	srv.AddTool(mcp.NewTool("gdocs_drive_list_revisions",
 		mcp.WithDescription("List the saved versions of a file: when, by whom, and which ones Drive has "+
-			"been told to keep. Restoring one is done in the editor — the API cannot — so the useful "+
-			"move here is to mark the version worth going back to before Drive prunes it."),
+			"been told to keep. gdocs_drive_restore_revision goes back to one, exactly for an ordinary "+
+			"file and through a conversion for a Google one; gdocs_drive_keep_revision stops Drive "+
+			"pruning the version worth going back to."),
 		mcp.WithString("file_id", mcp.Required(), mcp.Description(fileIDHelp)),
 		mcp.WithString("page_token", mcp.Description("Token from a previous answer.")),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -107,14 +108,37 @@ func (r *registry) registerDriveManage(srv *server.MCPServer) {
 	), r.driveReplyComment)
 
 	srv.AddTool(mcp.NewTool("gdocs_drive_keep_revision",
-		mcp.WithDescription("Tell Drive to keep a version rather than prune it. The API cannot restore a "+
-			"version of a Google editor file — only the editor can — so this is what makes sure the one "+
-			"worth going back to is still there when a person goes back to it."),
+		mcp.WithDescription("Tell Drive to keep a version rather than prune it. Worth doing before a "+
+			"risky edit: Drive thins out old versions on its own, and for a Google file the browser's "+
+			"own history is the only way back that loses nothing — gdocs_drive_restore_revision has to "+
+			"go through a conversion."),
 		mcp.WithString("file_id", mcp.Required(), mcp.Description(fileIDHelp)),
 		mcp.WithString("revision_id", mcp.Required(), mcp.Description(
 			"Revision, as reported by gdocs_drive_list_revisions.")),
 		mcp.WithBoolean("keep", mcp.DefaultBool(true), mcp.Description("Keep it, or stop keeping it.")),
 	), r.driveKeepRevision)
+
+	srv.AddTool(mcp.NewTool("gdocs_drive_restore_revision",
+		mcp.WithDescription("Put a file back to what it was at an earlier version, keeping its identifier "+
+			"— and so every link to it, every slide showing it and every permission on it. Drive has no "+
+			"request that does this, so it is done by fetching that version's content and writing it "+
+			"over the file. What that costs depends on the file. An ordinary one — a PDF, a picture, an "+
+			"archive — is stored as bytes and comes back exactly. A Google document, workbook or deck "+
+			"is not stored as bytes at all: the only way out is a conversion, so the restore goes "+
+			"through DOCX, XLSX or PPTX and loses whatever that format cannot carry. The answer lists "+
+			"what that is. Restoring also makes a new version rather than undoing the ones since, so "+
+			"nothing is lost twice."),
+		mcp.WithString("file_id", mcp.Required(), mcp.Description(fileIDHelp)),
+		mcp.WithString("revision_id", mcp.Required(), mcp.Description(
+			"Version to go back to, as gdocs_drive_list_revisions reports it.")),
+		mcp.WithBoolean("confirm_conversion", mcp.Description(
+			"Required for a Google document, workbook or deck, and refused for anything else. It is "+
+				"the acknowledgement that the restore goes through a conversion and comes back changed: "+
+				"for a deck that usually means the theme, the speaker notes' formatting and any linked "+
+				"chart. Without it the tool reads the version and refuses, naming the format it would "+
+				"have used.")),
+		mcp.WithDestructiveHintAnnotation(true),
+	), r.driveRestoreRevision)
 
 	srv.AddTool(mcp.NewTool("gdocs_drive_delete_to_trash",
 		mcp.WithDescription("Put a file in the bin, or take it back out. This is as far as removal goes: a "+
@@ -456,6 +480,143 @@ func (r *registry) driveReplyComment(ctx context.Context, req mcp.CallToolReques
 		"reply_id":   reply.ID,
 		"action":     reply.Action,
 	})
+}
+
+// restoreFormats are the format a restore takes each kind of Google file back through, and
+// what that format is known to drop.
+//
+// The list is short and specific on purpose. "Some formatting may be lost" is not something a
+// caller can act on; "the theme, and every chart's link to its workbook" is — it says what to
+// check afterwards and what to put back by hand.
+var restoreFormats = map[string]struct {
+	mimeType string
+	loses    []string
+}{
+	google.MimeDocument: {
+		mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		loses: []string{"comments and suggestions", "chips pointing at people or files",
+			"drawings made in the editor", "named ranges"},
+	},
+	google.MimeSpreadsheet: {
+		mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		loses: []string{"comments and notes attached by others", "the look of dropdowns",
+			"charts' links to their ranges where the ranges moved", "developer metadata"},
+	},
+	google.MimePresentation: {
+		mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+		loses: []string{"the theme's own identity, which comes back as ordinary layouts",
+			"every chart's link to its workbook, which becomes a picture",
+			"comments and suggestions", "linked slides"},
+	},
+}
+
+func (r *registry) driveRestoreRevision(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	fileID, err := requiredString(req, "file_id")
+	if err != nil {
+		return toolError(err), nil
+	}
+	revisionID, err := requiredString(req, "revision_id")
+	if err != nil {
+		return toolError(err), nil
+	}
+
+	client, err := r.client(ctx)
+	if err != nil {
+		return toolError(err), nil
+	}
+
+	file, err := client.FileMetadata(ctx, fileID)
+	if err != nil {
+		return toolError(err), nil
+	}
+
+	format, isEditorFile := restoreFormats[file.MimeType]
+	confirmed := req.GetBool("confirm_conversion", false)
+
+	switch {
+	case isEditorFile && !confirmed:
+		return toolError(fmt.Errorf("%q is a Google %s, which is not stored as bytes: putting it back "+
+			"means exporting that version as %s and writing it over the file, and it comes back without "+
+			"%s. Nothing has been changed. Pass confirm_conversion to go ahead, or open the version "+
+			"history in the browser, where the editor restores it without a conversion",
+			file.Name, kindWord(file.MimeType), shortFormat(format.mimeType),
+			strings.Join(format.loses, ", "))), nil
+
+	case !isEditorFile && confirmed:
+		return toolError(fmt.Errorf("%q is not a Google document, workbook or deck, so no conversion "+
+			"happens and confirm_conversion has nothing to confirm: its bytes go back exactly as they "+
+			"were. Call again without it", file.Name)), nil
+	}
+
+	preferred := []string{format.mimeType}
+	if !isEditorFile {
+		preferred = nil
+	}
+
+	content, usedFormat, err := client.RevisionContent(ctx, fileID, revisionID, preferred)
+	if err != nil {
+		return toolError(err), nil
+	}
+	if len(content) == 0 {
+		return toolError(fmt.Errorf("that version came back empty, so nothing was written: " +
+			"check the revision identifier against gdocs_drive_list_revisions")), nil
+	}
+
+	if usedFormat == "" {
+		usedFormat = file.MimeType
+	}
+
+	restored, err := client.ReplaceFileContent(ctx, fileID, usedFormat, content)
+	if err != nil {
+		return toolError(err), nil
+	}
+
+	payload := map[string]any{
+		"file_id":     fileID,
+		"name":        restored.Name,
+		"revision_id": revisionID,
+		"bytes":       len(content),
+		"note": "the file keeps its identifier, so every link to it and every permission on it " +
+			"survives; the restore is itself a new version, so the ones it went back past are still " +
+			"in the history",
+	}
+
+	if isEditorFile {
+		payload["through"] = shortFormat(usedFormat)
+		payload["not_restored"] = format.loses
+	} else {
+		payload["exact"] = true
+	}
+
+	return resultJSON(payload)
+}
+
+// kindWord names a Google file the way a person would.
+func kindWord(mimeType string) string {
+	switch mimeType {
+	case google.MimeDocument:
+		return "document"
+	case google.MimeSpreadsheet:
+		return "workbook"
+	case google.MimePresentation:
+		return "presentation"
+	}
+
+	return "file"
+}
+
+// shortFormat is the last word of a MIME type, which is the one a person recognises.
+func shortFormat(mimeType string) string {
+	switch mimeType {
+	case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+		return "DOCX"
+	case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+		return "XLSX"
+	case "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+		return "PPTX"
+	}
+
+	return mimeType
 }
 
 func (r *registry) driveKeepRevision(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

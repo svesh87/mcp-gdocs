@@ -47,6 +47,10 @@ func (r *registry) registerSheetsObjects(srv *server.MCPServer) {
 		mcp.WithNumber("width", mcp.Description("Width in pixels.")),
 		mcp.WithNumber("height", mcp.Description("Height in pixels.")),
 		mcp.WithString("border_color", mcp.Description("Frame colour as #RRGGBB.")),
+		mcp.WithBoolean("no_border", mcp.Description(
+			"Take the frame off altogether. Not the same as painting it the colour behind it: a "+
+				"border painted to match still draws, and on a panel's rounded corner it leaves thin "+
+				"strokes along the edge. This is what makes a chart sit in a panel with no seam.")),
 		mcp.WithString("title", mcp.Description("New title above the chart.")),
 		mcp.WithString("subtitle", mcp.Description("New subtitle.")),
 		mcp.WithString("alt_text", mcp.Description("Description for a screen reader.")),
@@ -226,7 +230,29 @@ func (r *registry) sheetsUpdateChart(ctx context.Context, req mcp.CallToolReques
 		})
 	}
 
-	if colour := optionalString(req, "border_color"); colour != "" {
+	// Taking the frame off is not the same as painting it the colour behind it, and the
+	// difference is visible: a border painted to match still draws, and on the rounded corner
+	// of a panel it leaves thin strokes along the edge. Clearing the colour outright — an
+	// empty border with a mask of "*" — is what makes a chart sit in a panel with no seam.
+	if req.GetBool("no_border", false) {
+		if optionalString(req, "border_color") != "" {
+			return toolError(fmt.Errorf("no_border takes the frame off and border_color paints it: " +
+				"name one. Painting it the colour of what is behind it is the thing that leaves " +
+				"visible strokes on a rounded corner, which is what no_border is for")), nil
+		}
+		// A colour with no alpha, not an absent colour: clearing the field leaves the frame
+		// drawn in Google's default dark, which is more visible than the one it replaced.
+		// Verified on a live chart, twice — once each way.
+		requests = append(requests, google.SheetsRequest{
+			UpdateEmbBorder: &google.UpdateEmbeddedBorderReq{
+				ObjectID: chartID,
+				Border: &google.EmbedBorder{Color: map[string]any{
+					"rgbColor": map[string]any{"red": 1, "green": 1, "blue": 1, "alpha": 0},
+				}},
+				Fields: "colorStyle",
+			},
+		})
+	} else if colour := optionalString(req, "border_color"); colour != "" {
 		rgb, err := parseHexColor(colour)
 		if err != nil {
 			return toolError(err), nil
@@ -343,14 +369,24 @@ func wantsSpecChange(req mcp.CallToolRequest) bool {
 // strategy. Only the keys named here are touched.
 func (r *registry) patchChartSpec(ctx context.Context, client *google.Client, spreadsheetID string,
 	spec map[string]any, req mcp.CallToolRequest) error {
+	// An empty string is a decision, not a missing argument. A chart whose name is written on
+	// the slide beside it should carry no title of its own, and "title": "" is how a caller
+	// says so — dropped as empty, it left the old title in place and looked like the call had
+	// worked. Google ignores an empty value in a specification, so the key is removed instead.
+	arguments := req.GetArguments()
 	for _, word := range []struct{ argument, key string }{
 		{"title", "title"},
 		{"subtitle", "subtitle"},
 		{"alt_text", "altText"},
 		{"font", "fontName"},
 	} {
-		if text := optionalString(req, word.argument); text != "" {
+		if _, given := arguments[word.argument]; !given {
+			continue
+		}
+		if text := optionalString(req, word.argument); strings.TrimSpace(text) != "" {
 			spec[word.key] = text
+		} else {
+			delete(spec, word.key)
 		}
 	}
 
@@ -370,7 +406,6 @@ func (r *registry) patchChartSpec(ctx context.Context, client *google.Client, sp
 		spec["titleTextFormat"] = format
 	}
 
-	arguments := req.GetArguments()
 	_, wantsLabels := arguments["data_labels"]
 	_, wantsTotals := arguments["total_data_labels"]
 	_, wantsRange := arguments["value_columns"]

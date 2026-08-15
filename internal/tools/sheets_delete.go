@@ -82,7 +82,7 @@ func (r *registry) sheetsDelete(ctx context.Context, req mcp.CallToolRequest) (*
 		}
 	}
 
-	request, described, err := sheetsDeleteRequest(req, what, sheetID)
+	request, described, err := r.sheetsDeleteRequest(req, what, sheetID)
 	if err != nil {
 		return toolError(err), nil
 	}
@@ -97,7 +97,7 @@ func (r *registry) sheetsDelete(ctx context.Context, req mcp.CallToolRequest) (*
 }
 
 // sheetsDeleteRequest works out which single thing a call names.
-func sheetsDeleteRequest(req mcp.CallToolRequest, what string, sheetID int) (*google.SheetsRequest, map[string]any, error) {
+func (r *registry) sheetsDeleteRequest(req mcp.CallToolRequest, what string, sheetID int) (*google.SheetsRequest, map[string]any, error) {
 	objectID := req.GetInt("object_id", -1)
 
 	dimension := func(kind string) (google.DimensionRange, error) {
@@ -171,6 +171,9 @@ func sheetsDeleteRequest(req mcp.CallToolRequest, what string, sheetID int) (*go
 	case "tab":
 		if sheetID < 0 {
 			return nil, nil, fmt.Errorf("name the tab: sheet_title or sheet_id")
+		}
+		if err := r.mayRemoveWholePage(SheetsDelete); err != nil {
+			return nil, nil, err
 		}
 
 		return &google.SheetsRequest{DeleteSheet: &google.DeleteSheetRequest{SheetID: sheetID}},

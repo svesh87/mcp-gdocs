@@ -51,12 +51,24 @@ None of it is on by default. Every removing tool lives in a group of its own —
 wants one names it: `--tools=all,docs-delete`. The same is true of sharing, which is the
 one thing here that makes something visible outside the account and lives in `drive-share`.
 
+Removing a whole page takes a second switch on top: `slides-delete-page` for a slide,
+`sheets-delete-tab` and `docs-delete-tab` for a tab. The line is what a mistake costs — a
+stray shape is a moment's work to put back, a tab of a workbook is data nobody has any more —
+and it makes "tidy up the shapes but do not drop a slide" something a configuration can say.
+A refusal names the group that is missing, so a narrow server does not look like a broken one.
+
+Going back is `gdocs_drive_restore_revision`. For an ordinary file it is exact. For a Google
+document, workbook or deck there is no restore request at all, so the version is exported and
+written back, and the conversion loses things — the tool refuses without `confirm_conversion`
+and lists what. The file keeps its identifier either way, so every link and permission
+survives, and the restore is itself a new version rather than an undo.
+
 Everything that changes anything at all needs `--allow-write`. Without it the server
 offers only the reading tools.
 
 ## Choosing the set of tools
 
-A hundred and forty-three tool descriptions in an agent's context is a hundred and forty it
+A hundred and forty-nine tool descriptions in an agent's context is a hundred and forty it
 will never call. `--tools` picks what a server offers, by family and by what the tools do:
 
 ```
@@ -68,7 +80,9 @@ GDOCS_TOOLS=drive-read            # the same through the environment, for compos
 ```
 
 The groups are `slides-`, `sheets-` and `docs-`, each with `read`, `write`, `copy` and
-`delete`; `drive-` has all but `copy`, plus `drive-share`. `copy` is the tools that carry
+`delete`, plus one more apiece for removing a whole page — `slides-delete-page`,
+`sheets-delete-tab`, `docs-delete-tab`. `drive-` has all but the copying and page ones, plus
+`drive-share`. `copy` is the tools that carry
 content in from another document, which is the kind of thing a project may want to switch
 off on its own — "work here, but do not drag things in from elsewhere". Copying a *file* is
 not in it: `gdocs_drive_copy` and `gdocs_slides_copy_presentation` are ordinary Drive
@@ -92,7 +106,7 @@ window cannot show what `--tools` did not allow.
 
 ## Tools
 
-A hundred and forty-three of them, covering every request the three APIs have except the
+A hundred and forty-nine of them, covering every request the three APIs have except the
 five that reach BigQuery. A server started without `--allow-write` registers the reading
 ones and nothing else, and the four that touch the disk — `gdocs_drive_export_file`,
 `gdocs_drive_download_file`, `gdocs_drive_import_file` and `gdocs_slides_export_images` —
@@ -106,7 +120,12 @@ headings are 25 pt in the theme's accent colour cannot decide to use 22 pt here,
 the size and change the colour.
 
 Carrying content between documents is a different question and has its own tools, in groups
-of their own — `slides-copy`, `sheets-copy`, `docs-copy`. "Bring that slide here", "put this
+of their own — `slides-copy`, `sheets-copy`, `docs-copy`. Those groups also hold the bridges
+between the three kinds of document, which are named for where the content lands and read the
+family it comes from: three things mean the same thing in all three — a table is values with a
+look per cell, text is paragraphs with a look per run, a picture is an address — and a bridge
+carries those and names the rest. That does mean a window on one family can read another: the
+sub-paths stay a boundary on what may be changed, and stop being one on what may be read. "Bring that slide here", "put this
 tab in that workbook", "take these paragraphs from the last offer" are ordinary work, and
 the answer to each is exact rather than approximate. Google gives one request for it in
 total, `sheets.copyTo`; everywhere else these tools read the source and build it again, and
@@ -156,6 +175,8 @@ Slides, the content of a deck:
 | `gdocs_slides_set_list` | turn a text box into a native nested list, depth by tab characters |
 | `gdocs_slides_copy_slide` | build a slide from another deck again here: content, not theme |
 | `gdocs_slides_copy_element` | the same for one element |
+| `gdocs_slides_copy_table_from_sheets` | a rectangle of a workbook as a real table, values as shown |
+| `gdocs_slides_copy_text_from_docs` | a stretch of a document as a text box |
 | `gdocs_slides_create_table_with_text` | a real table with widths, fonts, colours and alignment |
 | `gdocs_slides_update_table_cells` | new values in a table that already exists, keeping its widths and styling |
 | `gdocs_slides_style_table` | merge cells, fill them, align their content, set row heights |
@@ -255,6 +276,9 @@ Sheets, Docs and Drive:
 | `gdocs_sheets_copy_sheet` | copy a tab into another workbook, with everything Google copies and this server cannot write |
 | `gdocs_sheets_copy_range` | copy a rectangle into another workbook: what was typed, with its format, notes and dropdowns |
 | `gdocs_docs_copy_range` | build a stretch of another document again here: paragraphs, runs, lists, pictures |
+| `gdocs_docs_copy_table_from_sheets` | a rectangle of a workbook as a real table, in two passes |
+| `gdocs_docs_copy_slide_image` | a picture of a slide, for a report quoting a deck |
+| `gdocs_sheets_copy_table_from_docs` | a table out of a document or off a slide, as cells that can be summed |
 | `gdocs_sheets_filter_view` | a saved way of looking at a range, without changing anybody else's view |
 | `gdocs_sheets_slicer` | the control a reader clicks to filter by one column |
 | `gdocs_sheets_set_metadata` | a label that travels with the row it is attached to |
@@ -264,6 +288,7 @@ Sheets, Docs and Drive:
 | `gdocs_drive_rename`, `gdocs_drive_move` | a file's name and where it sits |
 | `gdocs_drive_add_comment`, `gdocs_drive_reply_comment` | leave a comment, answer one, resolve a thread |
 | `gdocs_drive_keep_revision` | keep a version from being pruned |
+| `gdocs_drive_restore_revision` | put a file back to an earlier version, keeping its identifier — exact for an ordinary file, through a conversion for a Google one |
 | `gdocs_drive_delete_to_trash` | put a file in the bin, or take it back out |
 | `gdocs_drive_share`, `gdocs_drive_unshare` | give access and take it back — only with `--tools=…,drive-share` |
 

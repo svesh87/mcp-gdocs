@@ -125,6 +125,18 @@ What does not, and is named in `not_carried` instead:
 | a horizontal rule | the API has no request for one | — |
 | a drawing | the API reports it with no address at all, so there is nothing to fetch | a person pastes it |
 
+Two more bring content in from the other kinds of document:
+
+| To do | Tool | Notes |
+|---|---|---|
+| a rectangle of a workbook as a real table | `gdocs_docs_copy_table_from_sheets` | values **as shown**, with each cell's weight, colour, alignment and fill |
+| a picture of a slide | `gdocs_docs_copy_slide_image` | a snapshot; it stops following the slide the moment it is taken |
+
+The table is made in two passes and cannot be otherwise: a table's cells have no indices until
+the table exists, and those indices are not predictable from the request that made it. So the
+table is inserted, the document is read back, and the cells are filled — from the last one
+backwards, because every insertion moves everything after it.
+
 Indices are the document's own, as `read_structure` reports them, and they count **UTF-16
 code units**. Every style the copy writes names a range in the *target's* coordinates, not
 the source's — that arithmetic is most of what the tool does, and it is why a range cannot
@@ -179,3 +191,13 @@ A document can hold several tabs, the pages in the editor's left rail.
 `gdocs_docs_delete` reaches a range, a table row or column, a header, a footer, a floating
 object, and the bullets of a list — one per call. It reaches nothing outside the document:
 no file, no folder, no drive, and no other document. That half of the rule has not moved.
+
+A whole tab is a second switch: `tab_id` takes the tab and everything on it, and needs
+`docs-delete-tab` as well as `docs-delete`. The refusal names the group, so a server that was
+started narrowly says so rather than looking broken.
+
+Going back further than one edit is `gdocs_drive_restore_revision`, and for a document it is
+not free: Drive has no restore request, so the version is exported as DOCX and written back,
+which loses comments, chips and drawings. It refuses without `confirm_conversion` and lists
+what the round trip costs. The browser's own version history restores without a conversion —
+when that matters, that is the answer.

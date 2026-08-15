@@ -138,14 +138,23 @@ names the series or is drawn as data.
 
 The chart reads the cells rather than a copy of them, so it follows the numbers.
 
-**Paint it to match where it will stand.** A chart put on a slide inside a panel arrives with
-a white rectangle of its own and paints over the panel — its corners show and its field does
-not. `background_color` takes `#RRGGBB`; read the panel's fill with
-`gdocs_slides_inspect_page` and pass that. There is no transparent option: Google refuses an
-alpha on a chart background outright ("chart.backgroundColorStyle.alpha not supported"), and
-`transparent_background` exists only to say so. For a deck with light and dark variants that
-means one `background_color` per variant — the chart lives in the workbook and inherits
-nothing from the deck's palette.
+**Paint it to match where it will stand, and take its frame off.** A chart put on a slide
+inside a panel arrives with a white rectangle of its own and paints over the panel — its
+corners show and its field does not.
+
+- `background_color` takes `#RRGGBB`; read the panel's fill with `gdocs_slides_inspect_page`
+  and pass that. There is no transparent option: Google refuses an alpha on a chart
+  background outright ("chart.backgroundColorStyle.alpha not supported"), and
+  `transparent_background` exists only to say so.
+- `no_border` takes the frame off. Not the same as `border_color` matched to the panel: a
+  border painted to match still draws, and on a rounded corner it shows as thin strokes. And
+  not the same as clearing the colour either — a border with no colour comes back in Google's
+  default dark, which is worse than what it replaced. The alpha that the background refuses
+  is accepted here, which is the whole trick and is the sort of thing only a render tells you.
+- `title: ""` takes the title off, for a chart whose name is written on the slide beside it.
+
+For a deck with light and dark variants that means one `background_color` per variant — the
+chart lives in the workbook and inherits nothing from the deck's palette.
 
 **Print the numbers on it.** `data_labels` puts each value on its own bar or point;
 `total_data_labels` puts the sum over each stacked column. They are different fields, not
@@ -176,6 +185,12 @@ changes nothing on the slide until `gdocs_slides_refresh_sheets_chart` is called
 element, and by looking at the slide you cannot tell this month's numbers from last
 year's. Refresh every chart before handing a deck over — and then look at the renders,
 because the refresh brings across everything that changed, not only what you expected.
+
+**A deck that will outlive the workbook wants a picture, not a link.** A linked chart is right
+while the numbers are still moving and wrong for a deck opened in a year or sent outside the
+company, where the reader cannot reach the workbook at all. `references/controls.md` of
+**gdocs-slides** has the order for baking one into a picture, and the order is the whole of
+it: a picture freezes whatever was on screen.
 
 ## Tables
 
@@ -231,6 +246,17 @@ gdocs_sheets_copy_range
 Inside one workbook this is not the tool: `gdocs_sheets_move_range` above does it in one
 request, and `gdocs_sheets_duplicate_tab` copies a tab.
 
+**From the other kinds of document** there is `gdocs_sheets_copy_table_from_docs`: a table out
+of a document, or off a slide, arriving as cells. The text of each cell lands as a value
+parsed the way typing it would be, so a column of figures can be summed — written raw, every
+figure out of a document arrives as text and the first sum over it is zero. What a table has
+and a range has not — merged cells, per-cell fills, borders — is named in the answer rather
+than approximated.
+
+Going the other way, a rectangle of this workbook becomes a table on a slide or in a document
+with `gdocs_slides_copy_table_from_sheets` and `gdocs_docs_copy_table_from_sheets`. Those carry
+the values **as shown**: a formula has no meaning where nobody can evaluate it.
+
 ## Views, slicers and labels
 
 | What | Read with | Write with |
@@ -253,6 +279,12 @@ It exists because building is not one-shot, and it is off unless the server was 
 with `sheets-delete`. There is no undo: take the indexes from a reading made after the last
 edit. Two of the targets leave the values alone and remove only the wrapper — `named_range`
 and `table` — and the answer says so.
+
+**A whole tab needs a second switch.** `what: "tab"` takes the tab and everything on it, and
+that needs `sheets-delete-tab` on top of `sheets-delete`. The two are separated by what a
+mistake costs: a row is a moment's work to put back, a tab is data nobody has any more. A
+server started without it refuses and names the group, so "removal is broken" and "this
+removal is switched off" do not look the same.
 
 ## Files
 

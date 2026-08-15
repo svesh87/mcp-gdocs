@@ -3,7 +3,9 @@
     "gdocs_reference"
   ],
   "docs-copy": [
-    "gdocs_docs_copy_range"
+    "gdocs_docs_copy_range",
+    "gdocs_docs_copy_slide_image",
+    "gdocs_docs_copy_table_from_sheets"
   ],
   "docs-delete": [
     "gdocs_docs_delete"
@@ -65,11 +67,13 @@
     "gdocs_drive_keep_revision",
     "gdocs_drive_move",
     "gdocs_drive_rename",
-    "gdocs_drive_reply_comment"
+    "gdocs_drive_reply_comment",
+    "gdocs_drive_restore_revision"
   ],
   "sheets-copy": [
     "gdocs_sheets_copy_range",
-    "gdocs_sheets_copy_sheet"
+    "gdocs_sheets_copy_sheet",
+    "gdocs_sheets_copy_table_from_docs"
   ],
   "sheets-delete": [
     "gdocs_sheets_delete"
@@ -120,7 +124,9 @@
   ],
   "slides-copy": [
     "gdocs_slides_copy_element",
-    "gdocs_slides_copy_slide"
+    "gdocs_slides_copy_slide",
+    "gdocs_slides_copy_table_from_sheets",
+    "gdocs_slides_copy_text_from_docs"
   ],
   "slides-delete": [
     "gdocs_slides_delete"

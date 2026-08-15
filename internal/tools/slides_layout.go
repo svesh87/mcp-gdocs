@@ -343,6 +343,9 @@ func (r *registry) slidesDelete(ctx context.Context, req mcp.CallToolRequest) (*
 		}
 
 		if kind == "slide" {
+			if err := r.mayRemoveWholePage(SlidesDelete); err != nil {
+				return toolError(fmt.Errorf("%s is a slide, and %w", objectID, err)), nil
+			}
 			slides++
 		}
 

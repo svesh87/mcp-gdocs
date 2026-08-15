@@ -719,8 +719,13 @@ type UpdateEmbeddedBorderReq struct {
 }
 
 // EmbedBorder is that frame.
+//
+// The colour is untyped for the same reason as a chart's background: taking the frame off
+// means sending a colour whose alpha is zero, and a typed colour with omitempty drops exactly
+// that value. Clearing the field instead does not work — a border with no colour is drawn in
+// the default dark one, which is more visible than whatever it replaced.
 type EmbedBorder struct {
-	Color *ColorStyle `json:"colorStyle,omitempty"`
+	Color any `json:"colorStyle,omitempty"`
 }
 
 // AddFilterViewRequest saves a way of looking at a range — its own filter and sort, which

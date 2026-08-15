@@ -20,6 +20,13 @@ below are the ones that are expensive to rediscover; the rest of the reasoning i
   configuration that wants one names it in `--tools`. `deletionTools` in
   `register_test.go` is the full list, and a new name that removes anything fails the
   build until it is added there deliberately.
+
+  **A whole page is a second switch.** `slides-delete-page`, `sheets-delete-tab` and
+  `docs-delete-tab` are permissions rather than sets of tools: no name lands in them, and the
+  removing tool of each family consults them when it sees what it was asked to remove. The
+  line is what a mistake costs — a stray shape is a moment's work, a tab is data nobody has
+  any more. A refusal names the missing group, because an operator reading "not allowed" has
+  no way to find out what to add.
 - **No arbitrary `batchUpdate`.** A caller must not be able to hand this server its own
   list of API requests. Assembled batches are exactly what puts text boxes at invented
   coordinates and leaves a deck looking broken. Every tool builds its own requests.
@@ -34,6 +41,13 @@ below are the ones that are expensive to rediscover; the rest of the reasoning i
   image address dies in about thirty minutes — and whatever could not be carried is **named
   in the answer**. A copying tool that reports success while quietly leaving a table behind
   is a defect, not a limitation.
+
+  **A bridge between two kinds of document is named for where content lands and reads the
+  other family.** Three things mean the same thing in all three families — a table is values
+  with a look per cell, text is paragraphs with a look per run, a picture is an address — and
+  a bridge carries exactly those. The consequence is deliberate and has to stay written down:
+  a window on one family can now read another, so the sub-paths bound what may be **changed**
+  and no longer bound what may be read.
 - **No service account, no domain-wide delegation.** The server acts as the person who
   signed in, and nothing else. The reasoning is in `docs/SETUP.md`; it is not a default
   to revisit casually.

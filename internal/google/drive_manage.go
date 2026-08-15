@@ -1,10 +1,15 @@
 package google
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
+	"strings"
 )
 
 // This file is the half of Drive that is about the file rather than its contents: where it
@@ -273,6 +278,96 @@ func (c *Client) Revisions(ctx context.Context, fileID string, pageToken string)
 	if err := c.call(ctx, http.MethodGet,
 		endpoint(c.driveBase, "/files/"+url.PathEscape(fileID)+"/revisions", query), nil, &out); err != nil {
 		return nil, err
+	}
+
+	return &out, nil
+}
+
+// RevisionExports is one revision with the addresses its content can be fetched from.
+type RevisionExports struct {
+	ID           string            `json:"id"`
+	ModifiedTime string            `json:"modifiedTime,omitempty"`
+	MimeType     string            `json:"mimeType,omitempty"`
+	ExportLinks  map[string]string `json:"exportLinks,omitempty"`
+}
+
+// RevisionContent fetches what a file looked like at one revision.
+//
+// Two paths, and which one is taken decides whether a restore is exact. An ordinary file —
+// a PDF, a picture, an archive — is stored as bytes and comes back as those bytes. A Google
+// editor file is not stored as bytes at all: the only way out is a conversion, offered as a
+// set of export links, and the answer says which format was taken so a caller can be told
+// what a restore from it will cost.
+func (c *Client) RevisionContent(ctx context.Context, fileID, revisionID string, preferred []string) ([]byte, string, error) {
+	query := url.Values{}
+	query.Set("fields", "id,modifiedTime,mimeType,exportLinks")
+
+	var meta RevisionExports
+	if err := c.call(ctx, http.MethodGet,
+		endpoint(c.driveBase, "/files/"+url.PathEscape(fileID)+"/revisions/"+url.PathEscape(revisionID), query),
+		nil, &meta); err != nil {
+		return nil, "", err
+	}
+
+	if len(meta.ExportLinks) == 0 {
+		media := url.Values{}
+		media.Set("alt", "media")
+		content, _, err := c.download(ctx,
+			endpoint(c.driveBase, "/files/"+url.PathEscape(fileID)+"/revisions/"+url.PathEscape(revisionID), media))
+
+		return content, meta.MimeType, err
+	}
+
+	for _, mimeType := range preferred {
+		address, ok := meta.ExportLinks[mimeType]
+		if !ok {
+			continue
+		}
+		content, _, err := c.download(ctx, address)
+		if err != nil {
+			return nil, "", err
+		}
+
+		return content, mimeType, nil
+	}
+
+	offered := make([]string, 0, len(meta.ExportLinks))
+	for mimeType := range meta.ExportLinks {
+		offered = append(offered, mimeType)
+	}
+	sort.Strings(offered)
+
+	return nil, "", fmt.Errorf("this revision is offered in none of the formats a restore can use; "+
+		"Google offers %s", strings.Join(offered, ", "))
+}
+
+// ReplaceFileContent writes new bytes over a file, keeping its identifier.
+//
+// Keeping the identifier is the whole point: every link, every slide pointing at it and every
+// permission on it survives, which a delete-and-upload would not. For a Google editor file
+// the bytes are a conversion and Drive converts them back on the way in, so the file stays
+// the kind of file it was.
+func (c *Client) ReplaceFileContent(ctx context.Context, fileID, mimeType string, content []byte) (*File, error) {
+	query := url.Values{}
+	query.Set("uploadType", "media")
+	query.Set("supportsAllDrives", "true")
+	query.Set("fields", fileFields)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch,
+		endpoint(c.uploadBase, "/files/"+url.PathEscape(fileID), query), bytes.NewReader(content))
+	if err != nil {
+		return nil, fmt.Errorf("building the upload: %w", err)
+	}
+	req.Header.Set("Content-Type", mimeType)
+
+	raw, err := c.send(req)
+	if err != nil {
+		return nil, err
+	}
+
+	var out File
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, fmt.Errorf("decoding the answer from the upload: %w", err)
 	}
 
 	return &out, nil

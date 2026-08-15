@@ -1,0 +1,170 @@
+{
+  "requests": [
+    {
+      "insertText": {
+        "location": {
+          "index": 13
+        },
+        "text": "18"
+      }
+    },
+    {
+      "insertText": {
+        "location": {
+          "index": 11
+        },
+        "text": "QA"
+      }
+    },
+    {
+      "insertText": {
+        "location": {
+          "index": 9
+        },
+        "text": "12"
+      }
+    },
+    {
+      "updateTextStyle": {
+        "range": {
+          "startIndex": 9,
+          "endIndex": 11
+        },
+        "textStyle": {
+          "foregroundColor": {
+            "color": {
+              "rgbColor": {
+                "red": 0.1,
+                "green": 0.5,
+                "blue": 0.2
+              }
+            }
+          }
+        },
+        "fields": "foregroundColor"
+      }
+    },
+    {
+      "updateParagraphStyle": {
+        "range": {
+          "startIndex": 9,
+          "endIndex": 11
+        },
+        "paragraphStyle": {
+          "alignment": "END"
+        },
+        "fields": "alignment"
+      }
+    },
+    {
+      "insertText": {
+        "location": {
+          "index": 7
+        },
+        "text": "SRE"
+      }
+    },
+    {
+      "insertText": {
+        "location": {
+          "index": 5
+        },
+        "text": "Закрыто"
+      }
+    },
+    {
+      "updateTextStyle": {
+        "range": {
+          "startIndex": 5,
+          "endIndex": 12
+        },
+        "textStyle": {
+          "bold": true,
+          "fontSize": {
+            "magnitude": 11,
+            "unit": "PT"
+          }
+        },
+        "fields": "bold,fontSize"
+      }
+    },
+    {
+      "updateParagraphStyle": {
+        "range": {
+          "startIndex": 5,
+          "endIndex": 12
+        },
+        "paragraphStyle": {
+          "alignment": "END"
+        },
+        "fields": "alignment"
+      }
+    },
+    {
+      "updateTableCellStyle": {
+        "tableRange": {
+          "tableCellLocation": {
+            "tableStartLocation": {
+              "index": 1
+            },
+            "rowIndex": 0,
+            "columnIndex": 0
+          },
+          "rowSpan": 1,
+          "columnSpan": 1
+        },
+        "tableCellStyle": {
+          "backgroundColor": {
+            "color": {
+              "rgbColor": {
+                "red": 0.9,
+                "green": 0.9,
+                "blue": 0.9
+              }
+            }
+          }
+        },
+        "fields": "backgroundColor"
+      }
+    },
+    {
+      "insertText": {
+        "location": {
+          "index": 3
+        },
+        "text": "Команда"
+      }
+    },
+    {
+      "updateTextStyle": {
+        "range": {
+          "startIndex": 3,
+          "endIndex": 10
+        },
+        "textStyle": {
+          "bold": true,
+          "fontSize": {
+            "magnitude": 11,
+            "unit": "PT"
+          },
+          "weightedFontFamily": {
+            "fontFamily": "Rubik"
+          }
+        },
+        "fields": "bold,fontSize,weightedFontFamily"
+      }
+    },
+    {
+      "updateParagraphStyle": {
+        "range": {
+          "startIndex": 3,
+          "endIndex": 10
+        },
+        "paragraphStyle": {
+          "alignment": "START"
+        },
+        "fields": "alignment"
+      }
+    }
+  ]
+}

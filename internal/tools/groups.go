@@ -33,6 +33,18 @@ const (
 	DocsCopy   Group = "docs-copy"
 	DocsDelete Group = "docs-delete"
 
+	// The three below are permissions rather than sets of tools: no tool name lands in them,
+	// and the removing tool of each family looks at them when it sees what it was asked to
+	// remove.
+	//
+	// The line they draw is between what a rebuild costs. A stray shape is a moment's work
+	// to put back, a slide is an hour's, and a tab of a workbook is data nobody has any more.
+	// "Let it tidy up the shapes but not drop a slide" was not expressible before: a family
+	// had one removal switch, and it covered both.
+	SlidesDeletePage Group = "slides-delete-page"
+	SheetsDeleteTab  Group = "sheets-delete-tab"
+	DocsDeleteTab    Group = "docs-delete-tab"
+
 	DriveRead   Group = "drive-read"
 	DriveWrite  Group = "drive-write"
 	DriveDelete Group = "drive-delete"
@@ -57,10 +69,19 @@ var commonTools = map[string]bool{
 // allGroups is every group there is, in the order they are reported.
 var allGroups = []Group{
 	Common,
-	SlidesRead, SlidesWrite, SlidesCopy, SlidesDelete,
-	SheetsRead, SheetsWrite, SheetsCopy, SheetsDelete,
-	DocsRead, DocsWrite, DocsCopy, DocsDelete,
+	SlidesRead, SlidesWrite, SlidesCopy, SlidesDelete, SlidesDeletePage,
+	SheetsRead, SheetsWrite, SheetsCopy, SheetsDelete, SheetsDeleteTab,
+	DocsRead, DocsWrite, DocsCopy, DocsDelete, DocsDeleteTab,
 	DriveRead, DriveWrite, DriveDelete, DriveShare,
+}
+
+// pageGroups maps a removal group to the finer one that a whole page or tab needs on top of
+// it. Naming the pair here keeps the rule in one place: the tools consult this, the operator
+// messages are built from it, and a test walks it.
+var pageGroups = map[Group]Group{
+	SlidesDelete: SlidesDeletePage,
+	SheetsDelete: SheetsDeleteTab,
+	DocsDelete:   DocsDeleteTab,
 }
 
 // fileCopyTools are the tools whose names say "copy" and whose subject is a file rather
@@ -156,7 +177,8 @@ func defaultGroups() map[Group]bool {
 	enabled := map[Group]bool{}
 	for _, group := range allGroups {
 		switch group {
-		case SlidesDelete, SheetsDelete, DocsDelete, DriveDelete, DriveShare:
+		case SlidesDelete, SheetsDelete, DocsDelete, DriveDelete, DriveShare,
+			SlidesDeletePage, SheetsDeleteTab, DocsDeleteTab:
 			continue
 		}
 		enabled[group] = true
@@ -216,6 +238,44 @@ func ParseGroups(value string) (map[Group]bool, error) {
 	enabled[Common] = true
 
 	return enabled, nil
+}
+
+// pageWords say what the finer removal group covers, in the words of its own family.
+var pageWords = map[Group]struct{ whole, rest string }{
+	SlidesDeletePage: {"a slide with everything on it", "elements on a slide"},
+	SheetsDeleteTab:  {"a tab with everything on it", "rows, columns, cells and the rules over them"},
+	DocsDeleteTab:    {"a tab of a document with everything on it", "text, table rows, headers and footers"},
+}
+
+// enabled says whether a group was asked for, treating an unset configuration as the default
+// set — which is what Register does, and the two have to agree or a tool refuses something
+// the server is offering.
+func (r *registry) enabled(group Group) bool {
+	groups := r.opts.Groups
+	if groups == nil {
+		groups = defaultGroups()
+	}
+
+	return groups[group]
+}
+
+// mayRemoveWholePage decides whether this configuration allows taking out a whole slide or
+// tab rather than something standing on one.
+//
+// The check happens here rather than at registration because one tool does both jobs: the
+// group a tool belongs to is worked out from its name, and a name cannot say which of its
+// targets a particular call named. The refusal says which group is missing, because an
+// operator reading "not allowed" has no way to find out what to add.
+func (r *registry) mayRemoveWholePage(family Group) error {
+	finer, ok := pageGroups[family]
+	if !ok || r.enabled(finer) {
+		return nil
+	}
+
+	words := pageWords[finer]
+
+	return fmt.Errorf("removing %s is switched off: the server was started without %s. "+
+		"With %s alone it removes %s, and nothing whole", words.whole, finer, family, words.rest)
 }
 
 // GroupNames lists every group, for a message to an operator.

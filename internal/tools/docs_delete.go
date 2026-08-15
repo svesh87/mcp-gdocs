@@ -59,7 +59,7 @@ func (r *registry) docsDelete(ctx context.Context, req mcp.CallToolRequest) (*mc
 		return toolError(err), nil
 	}
 
-	request, described, err := docsDeleteRequest(req)
+	request, described, err := r.docsDeleteRequest(req)
 	if err != nil {
 		return toolError(err), nil
 	}
@@ -81,7 +81,7 @@ func (r *registry) docsDelete(ctx context.Context, req mcp.CallToolRequest) (*mc
 // docsDeleteRequest works out which single thing a call names, and refuses anything that
 // names two or none. One call, one removal: a tool that can be talked into removing more
 // than was asked for is the tool that eventually does.
-func docsDeleteRequest(req mcp.CallToolRequest) (*google.DocsRequest, map[string]any, error) {
+func (r *registry) docsDeleteRequest(req mcp.CallToolRequest) (*google.DocsRequest, map[string]any, error) {
 	segment := optionalString(req, "segment_id")
 	what := optionalString(req, "what")
 
@@ -127,6 +127,10 @@ func docsDeleteRequest(req mcp.CallToolRequest) (*google.DocsRequest, map[string
 			map[string]any{"removed": "positioned_object", "positioned_object_id": objectID}, nil
 
 	case tabID != "":
+		if err := r.mayRemoveWholePage(DocsDelete); err != nil {
+			return nil, nil, err
+		}
+
 		return &google.DocsRequest{DeleteTab: &google.DocsDeleteTab{TabID: tabID}},
 			map[string]any{"removed": "tab", "tab_id": tabID}, nil
 

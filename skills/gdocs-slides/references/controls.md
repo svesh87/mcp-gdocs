@@ -101,6 +101,22 @@ the frame comes out even instead of showing seams where two cells disagreed.
 | the same with a chart from a workbook | `gdocs_slides_replace_shapes_with_chart` | |
 | a chart from a workbook, placed by hand | `gdocs_slides_add_sheets_chart` | linked, it can be brought up to date later |
 | bring a linked chart up to date | `gdocs_slides_refresh_sheets_chart` | a deck built last quarter shows last quarter's numbers until this is called |
+| turn a linked chart into a picture | read `content_url` from `gdocs_slides_inspect_page`, then `gdocs_slides_insert_image` | the deck stops depending on the workbook |
+
+**Linked or baked is a decision about the deck's life, not about looks.** A linked chart
+follows its workbook, which is right while the numbers are still moving and wrong for a deck
+that will be opened in a year or sent outside the company: the reader has no access to the
+workbook, and the chart is a broken box. Baking it into a picture cuts that tie.
+
+The order matters, because a picture freezes whatever was there: put the chart in linked,
+finish its look, `refresh_sheets_chart`, *then* read `content_url` and insert it as an image,
+and only then remove the linked one. Get the order wrong and unfinished styling becomes
+indistinguishable from the styling you meant.
+
+One thing the baking does for free: the frame around a chart does not render into the
+picture, so a chart whose border was still drawn comes out clean. That is not a reason to
+skip `no_border` on a chart that stays linked — it is a reason not to spend time on the
+border of one you are about to bake.
 | a video from YouTube or Drive | `gdocs_slides_add_video` | with autoplay, mute, start and end |
 | the description a screen reader reads out | `gdocs_slides_set_alt_text` | nothing else writes it |
 | how a connector runs, and rerouting it | `gdocs_slides_route_line` | a connector drawn before its shapes were placed stays where it was drawn until this is called |
@@ -116,9 +132,23 @@ are in the `slides-copy` group, which the default set offers and `--tools=slides
 | a slide from another deck | `gdocs_slides_copy_slide` | content, not theme; the answer names what it could not carry |
 | **another copy of a slide in this deck** | `gdocs_slides_copy_slide` with the same id both sides, or `gdocs_slides_duplicate` | Google duplicates it: exact, loses nothing |
 | one element from another deck | `gdocs_slides_copy_element` | within one deck `gdocs_slides_duplicate` is cheaper and exact |
-| a table from a workbook | read with `gdocs_sheets_read` + `read_format`, write with `create_table_with_text` | |
+| a table from a workbook | `gdocs_slides_copy_table_from_sheets` | values **as shown**, with each cell's font, weight, colour, alignment and fill |
+| a stretch of a document | `gdocs_slides_copy_text_from_docs` | paragraphs, runs and list depth into a text box |
 | a chart from a workbook | `gdocs_slides_add_sheets_chart` | `chart_id` comes from `gdocs_sheets_info` |
 | a picture from another deck or document | `gdocs_slides_insert_image` with the `content_url` a reading gave | |
+
+**Across kinds of document, only three things mean the same thing**: a table is values with a
+look per cell, text is paragraphs with a look per run, a picture is an address. The bridges
+carry those and name the rest. Two are worth knowing before choosing one:
+
+- `copy_table_from_sheets` brings the values **as they are shown**, not as they were typed. A
+  formula on a slide is a formula nobody can evaluate, so what lands is the number it produced
+  when the copy was made — and the answer says so, along with any rule that was colouring the
+  cells, because a table that stopped reacting to its numbers looks exactly like one that
+  never did.
+- `copy_text_from_docs` drops the document's indents and keeps its list depth, for the same
+  reason a copied slide does: Slides works the indents out from the depth, and sending both
+  counts the depth twice.
 
 **Inside one deck, never rebuild.** A slide multiplied within its own presentation — one copy
 per metric, one per incident — is duplicated by Google itself and comes across whole,
@@ -175,6 +205,9 @@ The exports need the server started with `--files-dir`; importing also needs
 - **Delete a file, a folder or a drive.** A presentation can be put in the bin with
   `gdocs_drive_delete_to_trash`, where its owner finds it again for thirty days, and only
   when the server was started with `drive-delete`. Nothing empties that bin.
+- **Remove a whole slide with `slides-delete` alone.** That group covers elements on a slide;
+  the slide itself needs `slides-delete-page` as well, because a stray shape is a moment's
+  work to put back and a slide is an hour's. The refusal names the missing group.
 - **Make a new layout or apply another deck's theme.** The API has neither request. What
   it does have: the colour scheme and the existing layouts of a deck can be rewritten
   (`set_theme_colors`, `style_layout`), and a deck that must look like a sample is started

@@ -84,6 +84,7 @@ const layoutsMask = "layouts(objectId,layoutProperties(name,displayName))"
 func (r *registry) registerSlides(srv *server.MCPServer) {
 	r.registerSlidesLayout(srv)
 	r.registerSlidesCopy(srv)
+	r.registerCopyBridges(srv)
 	r.registerSlidesLinks(srv)
 	r.registerSlidesPage(srv)
 	r.registerSlidesShape(srv)

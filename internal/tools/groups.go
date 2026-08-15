@@ -65,8 +65,10 @@ const (
 var commonTools = map[string]bool{
 	"gdocs_reference": true,
 	// The tool that hands the others out belongs to no family either, and is offered only
-	// on a connection that asked for discovery.
+	// on a connection that asked for discovery. So is the one that calls a tool by name for
+	// a client whose list has not caught up.
 	"gdocs_find_tools": true,
+	"gdocs_call_tool":  true,
 }
 
 // allGroups is every group there is, in the order they are reported.

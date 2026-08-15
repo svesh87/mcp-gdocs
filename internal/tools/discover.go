@@ -25,30 +25,50 @@ import (
 // what it asks for afterwards is added to that session alone. Another connection to the same
 // path sees none of it.
 
-// Catalogue is what discovery may hand out: every tool the configuration allows, minus the
-// ones that must never arrive by asking.
+// Catalogue is what discovery may hand out: every tool the configuration allows.
 type Catalogue struct {
 	tools map[string]*server.ServerTool
 }
 
-// NewCatalogue takes the tools of a fully-registered server and keeps the ones discovery may
-// offer.
+// NewCatalogue takes the tools of a fully-registered server and offers all of them.
 //
-// Removal is left out whatever --tools allowed. The groups that remove things are a decision
-// an operator makes at startup, and a tool that arrives because an agent asked for it by name
-// is not that decision — it is the agent's. The ceiling stays where it was put.
+// Removal is in it, and the earlier rule that kept it out was premature. The ceiling is set
+// by an operator at startup, in --tools; a catalogue that cuts removal out of that ceiling
+// adds no safety, because the operator who typed slides-delete meant it. What it adds is
+// detours: an agent that cannot ask for the one tool that takes a stray shape off a slide
+// rebuilds the slide instead, and rebuilding is the operation that loses work. The finer
+// permissions — a whole slide, a whole tab — are still checked inside the removing tool
+// itself, on what a particular call named.
 func NewCatalogue(full *server.MCPServer) *Catalogue {
 	catalogue := &Catalogue{tools: map[string]*server.ServerTool{}}
 
 	for name, tool := range full.ListTools() {
-		group, err := GroupOf(name)
-		if err != nil || strings.Contains(string(group), "delete") {
+		if _, err := GroupOf(name); err != nil {
 			continue
 		}
 		catalogue.tools[name] = tool
 	}
 
 	return catalogue
+}
+
+// offers says whether the catalogue holds anything at all from a group, which is how a wrong
+// name is told apart from a group the server was started without.
+func (d *discovery) offers(group Group) bool {
+	for name := range d.catalogue.tools {
+		if held, err := GroupOf(name); err == nil && held == group {
+			return true
+		}
+	}
+
+	return false
+}
+
+// removes says whether a name is one of the removing tools, for the answer to say so.
+func removes(name string) bool {
+	group, err := GroupOf(name)
+
+	return err == nil && strings.Contains(string(group), "delete")
 }
 
 // Names is every tool the catalogue holds, in order.
@@ -120,21 +140,40 @@ func RegisterDiscovery(srv *server.MCPServer, catalogue *Catalogue) {
 
 	srv.AddTool(mcp.NewTool("gdocs_find_tools",
 		mcp.WithDescription("Ask for the tools you need. This connection started with the reading tools "+
-			"and this one; everything else — creating, styling, filling, exporting — arrives when you "+
-			"ask for it here, and stays for the rest of the session. Ask in the words of the job: "+
-			"\"bullets\", \"picture as a slide background\", \"dropdown\", \"copy a tab into another "+
-			"workbook\". The answer lists what was added, with what each one does, so the next call can "+
-			"be the real one. Asking twice for the same thing is free. Removal never arrives this way: "+
-			"it is switched on at startup or not at all."),
+			"and this one; everything else — creating, styling, filling, exporting, removing — arrives "+
+			"when you ask for it here, and stays for the rest of the session. Ask in the words of the "+
+			"job: \"bullets\", \"picture as a slide background\", \"dropdown\", \"copy a tab into another "+
+			"workbook\". English is what the names and descriptions are written in, and a short Russian "+
+			"word of the trade is understood too. The answer carries each tool's arguments in full, so "+
+			"the next call can be the real one — and gdocs_call_tool will make that call whether or not "+
+			"your client has noticed the new name. Asking twice for the same thing is free. What was "+
+			"never allowed at startup is not here: the answer says which group an operator would have "+
+			"to add."),
 		mcp.WithString("about", mcp.Description(
 			"What you are trying to do, in a few words. Matched against every tool's name and its "+
-				"description.")),
+				"description, which are in English; the common Russian words of the trade — таблица, "+
+				"список, ссылка, картинка, диаграмма, вкладка, шрифт, цвет — are translated before "+
+				"matching.")),
 		mcp.WithArray("names", mcp.WithStringItems(), mcp.Description(
 			"Exact tool names, when you already know them — from a skill, or from an earlier answer.")),
 		mcp.WithNumber("limit", mcp.DefaultNumber(8), mcp.Description(
 			"How many to add at most, when asking by words. Fewer, more often, keeps the context small.")),
 		mcp.WithReadOnlyHintAnnotation(true),
 	), handler.find)
+
+	srv.AddTool(mcp.NewTool("gdocs_call_tool",
+		mcp.WithDescription("Call any tool of this server by name, with its arguments as an object. "+
+			"This is the way through when a tool has been added to the session but your client is still "+
+			"showing the list it took at connection time: the name you cannot see, you can still call "+
+			"here. Take the name and the arguments from what gdocs_find_tools answered. It reaches "+
+			"exactly what the server was started with and nothing more, and the tool it calls does its "+
+			"own checking, so a removal that needs an operator's permission is refused here too."),
+		mcp.WithString("name", mcp.Required(), mcp.Description(
+			"Tool to call, e.g. gdocs_sheets_update_chart.")),
+		mcp.WithObject("arguments", mcp.Description(
+			"The tool's own arguments, as an object. Omit it for a tool that takes none."),
+			mcp.Properties(map[string]any{})),
+	), handler.call)
 }
 
 // discovery is the tool's own state: what may be handed out, the server to hand it out on,
@@ -187,9 +226,21 @@ func (d *discovery) find(ctx context.Context, req mcp.CallToolRequest) (*mcp.Cal
 	for _, name := range wanted {
 		tool := d.catalogue.tools[name]
 		adding = append(adding, *tool)
-		described = append(described, map[string]any{
-			"name": name, "does": tool.Tool.Description,
-		})
+
+		// The arguments come with the answer because the alternative is a second round
+		// trip that a client may never make: it can only show a tool's arguments once it
+		// has re-read the list. Calling a tool without knowing its arguments is worse than
+		// slow — gdocs_sheets_update_chart writes a chart's whole specification back, and
+		// a call made from a guess is what erases the data it draws.
+		one := map[string]any{
+			"name":      name,
+			"does":      tool.Tool.Description,
+			"arguments": tool.Tool.InputSchema,
+		}
+		if removes(name) {
+			one["removes"] = true
+		}
+		described = append(described, one)
 	}
 
 	if err := d.server.AddSessionTools(session.SessionID(), adding...); err != nil {
@@ -201,9 +252,83 @@ func (d *discovery) find(ctx context.Context, req mcp.CallToolRequest) (*mcp.Cal
 	return resultJSON(map[string]any{
 		"added":     described,
 		"available": len(d.catalogue.tools),
-		"note": "these are callable now. If your client does not list them yet, it has not re-read " +
-			"the tool list — reconnect without the discovery switch and everything arrives at once",
+		// What used to stand here said "these are callable now", and that was a promise this
+		// server cannot keep. A tool added to a session is announced to the client, and
+		// whether the client acts on the announcement is the client's business: it has to be
+		// listening on a stream it opened itself, and then re-read the list. Until it does,
+		// the name is real and invisible — which reads, from the agent's side, exactly like
+		// a tool that does not exist.
+		"note": "added to this session. Your client may not show them until it re-reads its tool " +
+			"list, and some clients never do — call them through gdocs_call_tool meanwhile, with " +
+			"the name and the arguments above",
 	})
+}
+
+// call runs a tool by name for a client that cannot see it yet.
+func (d *discovery) call(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	name, err := requiredString(req, "name")
+	if err != nil {
+		return toolError(err), nil
+	}
+
+	tool, ok := d.catalogue.tools[name]
+	if !ok {
+		return toolError(d.unknown([]string{name})), nil
+	}
+
+	arguments := map[string]any{}
+	if raw, given := req.GetArguments()["arguments"]; given && raw != nil {
+		arguments, ok = raw.(map[string]any)
+		if !ok {
+			return toolError(fmt.Errorf("arguments has to be an object of the tool's own arguments, "+
+				"not %T", raw)), nil
+		}
+	}
+
+	inner := mcp.CallToolRequest{Header: req.Header}
+	inner.Params.Name = name
+	inner.Params.Arguments = arguments
+
+	return tool.Handler(ctx, inner)
+}
+
+// unknown explains a name this server does not offer.
+//
+// A name can be missing for two different reasons, and the answer has to tell them apart. It
+// may not exist — a typo, or a tool this server has never had. Or it may exist in the build
+// and have been left out of --tools at startup, which is an operator's decision an agent
+// cannot undo and should stop trying to work around. The name itself says which group it
+// would belong to, so the second case can name what an operator would add — and removing a
+// whole slide or tab needs the finer group on top of the family's own.
+func (d *discovery) unknown(names []string) error {
+	var missing []string
+	for _, name := range names {
+		group, err := GroupOf(name)
+		// A group this catalogue already offers is proof the name itself is wrong: the
+		// tools of that group are here, and this is not one of them. Saying "the operator
+		// left it out" there would send an agent to argue with a configuration that is
+		// already what it wants.
+		if err != nil || d.offers(group) {
+			continue
+		}
+		advice := string(group)
+		if finer, ok := pageGroups[group]; ok {
+			// In that family's own words: "a whole slide or tab" is two different things
+			// and only one of them is ever the right one.
+			advice += ", and " + string(finer) + " as well for " + pageWords[finer].whole
+		}
+		missing = append(missing, fmt.Sprintf("%s would be %s", name, advice))
+	}
+
+	if len(missing) == 0 {
+		return fmt.Errorf("no tool called %s here — the name is wrong, or it belongs to another "+
+			"family's window. Ask by words with about instead", strings.Join(names, ", "))
+	}
+
+	return fmt.Errorf("no tool called %s here. Either the name is wrong, or the server was started "+
+		"without the group it belongs to (%s) — that is a decision made at startup with --tools, and "+
+		"asking cannot change it. Ask by words with about to see what this server does offer",
+		strings.Join(names, ", "), strings.Join(missing, "; "))
 }
 
 // wanted works out which tools to hand over.
@@ -222,9 +347,7 @@ func (d *discovery) wanted(req mcp.CallToolRequest, session server.ClientSession
 			}
 		}
 		if len(unknown) > 0 {
-			return nil, fmt.Errorf("no tool called %s here; either the name is wrong or it removes "+
-				"something, which never arrives by asking. Ask by words with about instead",
-				strings.Join(unknown, ", "))
+			return nil, d.unknown(unknown)
 		}
 
 		return found, nil
@@ -247,11 +370,80 @@ func (d *discovery) wanted(req mcp.CallToolRequest, session server.ClientSession
 		// saying so beats an empty answer that reads like "there is no such tool".
 		return nil, fmt.Errorf("nothing in %q is a word this can search by. Tool names and "+
 			"descriptions here are in English — ask in English, in the words of the job: "+
-			"\"nested list\", \"picture as a slide background\", \"copy a tab into another workbook\"",
+			"\"nested list\", \"picture as a slide background\", \"copy a tab into another workbook\". "+
+			"The plain Russian nouns of the trade are understood too — таблица, список, ссылка, "+
+			"картинка, диаграмма, вкладка, шрифт, цвет, фон, заголовок",
 			about)
 	}
 
 	return d.search(words, limit, session), nil
+}
+
+// tradeWords translates the words this work is talked about in.
+//
+// Not a dictionary and not a translator: the sessions that drive this server are held in
+// Russian, and an agent asked to fix a table on a slide reaches for the word it was asked in.
+// The tool names and descriptions are English on purpose — they are read by a model and end
+// up in transcripts — so a Russian question matched nothing at all, which reads as "there is
+// no such tool" rather than "ask differently". These are the two dozen nouns that name the
+// things a document is made of; a word that is not here still gets the refusal that says
+// which language to ask in.
+//
+// Keys are stems, matched as prefixes, because the same noun arrives in any case Russian
+// grammar puts it in — таблица, таблицу, таблице.
+var tradeWords = map[string]string{
+	"таблиц":    "table",
+	"ячейк":     "cell",
+	"строк":     "row",
+	"столб":     "column",
+	"колонк":    "column",
+	"списк":     "list",
+	"список":    "list",
+	"маркер":    "bullet",
+	"ссылк":     "link",
+	"картинк":   "image",
+	"изображен": "image",
+	"рисун":     "image",
+	"диаграмм":  "chart",
+	"график":    "chart",
+	"слайд":     "slide",
+	"вкладк":    "tab",
+	"лист":      "sheet",
+	"книг":      "spreadsheet",
+	"документ":  "document",
+	"колод":     "presentation",
+	"презентац": "presentation",
+	"шрифт":     "font",
+	"цвет":      "color",
+	"фон":       "background",
+	"заголов":   "title",
+	"подпис":    "caption",
+	"абзац":     "paragraph",
+	"отступ":    "indent",
+	"границ":    "border",
+	"рамк":      "border",
+	"заметк":    "notes",
+	"шаблон":    "template",
+	"макет":     "layout",
+	"тем":       "theme",
+	"колонтит":  "header footer",
+	"формул":    "formula",
+	"фильтр":    "filter",
+	"выпадающ":  "dropdown",
+	"папк":      "folder",
+	"файл":      "file",
+	"копи":      "copy",
+	"удал":      "delete",
+	"верси":     "revision",
+	"коммент":   "comment",
+	"доступ":    "share",
+	"текст":     "text",
+	"стиль":     "style",
+	"стил":      "style",
+	"размер":    "size",
+	"вырав":     "alignment",
+	"объедин":   "merge",
+	"видео":     "video",
 }
 
 // searchWords cuts a question into the words worth matching. Short ones are dropped: "a" and
@@ -259,14 +451,31 @@ func (d *discovery) wanted(req mcp.CallToolRequest, session server.ClientSession
 func searchWords(about string) []string {
 	var words []string
 	for _, word := range strings.FieldsFunc(strings.ToLower(about), func(r rune) bool {
-		return !('a' <= r && r <= 'z') && !('0' <= r && r <= '9')
+		return !('a' <= r && r <= 'z') && !('0' <= r && r <= '9') && !('а' <= r && r <= 'я') && r != 'ё'
 	}) {
-		if len(word) >= 3 {
+		if english, ok := translateWord(word); ok {
+			words = append(words, strings.Fields(english)...)
+			continue
+		}
+		// A Russian word that is not in the table matches nothing in an English description,
+		// and passing it on would only dilute the ranking.
+		if len(word) >= 3 && word[0] < 0x80 {
 			words = append(words, word)
 		}
 	}
 
 	return words
+}
+
+// translateWord turns one word of the trade into the English the descriptions are written in.
+func translateWord(word string) (string, bool) {
+	for stem, english := range tradeWords {
+		if strings.HasPrefix(word, stem) {
+			return english, true
+		}
+	}
+
+	return "", false
 }
 
 // search ranks the catalogue against a few words.

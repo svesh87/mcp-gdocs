@@ -116,8 +116,11 @@ func (r *registry) registerSlidesExtra(srv *server.MCPServer) {
 			"that will be shared outside the team needs these, and nothing else in the API writes them."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
 		mcp.WithString("object_id", mcp.Required(), mcp.Description("Element to describe.")),
-		mcp.WithString("title", mcp.Description("Short title.")),
-		mcp.WithString("description", mcp.Description("What the element shows.")),
+		mcp.WithString("title", mcp.Description(
+			"Short title. An empty string clears the one that is there; leaving the argument out "+
+				"keeps it.")),
+		mcp.WithString("description", mcp.Description(
+			"What the element shows. Empty clears it, the same way.")),
 	), r.slidesSetAltText)
 
 	srv.AddTool(mcp.NewTool("gdocs_slides_route_line",
@@ -522,10 +525,14 @@ func (r *registry) slidesSetAltText(ctx context.Context, req mcp.CallToolRequest
 		return toolError(err), nil
 	}
 
-	title := optionalString(req, "title")
-	description := optionalString(req, "description")
-	if title == "" && description == "" {
-		return toolError(fmt.Errorf("give a title, a description, or both")), nil
+	// Naming an argument empty is how alt text is taken off again, so what matters is
+	// whether it was named at all. Refusing an empty pair left a picture described wrongly
+	// with no way back short of replacing it.
+	title, hasTitle := givenString(req, "title")
+	description, hasDescription := givenString(req, "description")
+	if !hasTitle && !hasDescription {
+		return toolError(fmt.Errorf("give a title, a description, or both; either of them empty " +
+			"clears what is there")), nil
 	}
 
 	client, err := r.client(ctx)
@@ -533,8 +540,16 @@ func (r *registry) slidesSetAltText(ctx context.Context, req mcp.CallToolRequest
 		return toolError(err), nil
 	}
 
+	altText := &google.UpdateAltTextRequest{ObjectID: objectID}
+	if hasTitle {
+		altText.Title = &title
+	}
+	if hasDescription {
+		altText.Description = &description
+	}
+
 	if _, err := client.SlidesBatchUpdate(ctx, presentationID, []google.Request{{
-		UpdateAltText: &google.UpdateAltTextRequest{ObjectID: objectID, Title: title, Description: description},
+		UpdateAltText: altText,
 	}}); err != nil {
 		return toolError(err), nil
 	}

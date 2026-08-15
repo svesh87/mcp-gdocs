@@ -33,6 +33,12 @@ Ask `gdocs_reference` for the values that cannot be guessed: shape names by fami
 presets, arrowheads, dash styles, theme colour names, export formats, placeholder kinds,
 units.
 
+If the connection started with only the readings and `gdocs_find_tools`, ask that for the
+rest, in the words of the job — it answers with each tool's arguments in full. A name it says
+it added and your client still does not list is called through `gdocs_call_tool`, by name,
+with the arguments as an object; that path needs nothing of the client. What the server was
+started without cannot be asked for at all, and the refusal names the group.
+
 ## 1. Read, and read everything
 
 Three readings, in this order. Skipping any of them is how a slide comes out wrong in a way

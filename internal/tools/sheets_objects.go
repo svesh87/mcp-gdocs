@@ -571,7 +571,8 @@ func (r *registry) sheetsFilterView(ctx context.Context, req mcp.CallToolRequest
 		return resultJSON(map[string]any{"spreadsheet_id": spreadsheetID, "duplicated": viewID})
 	}
 
-	view := google.FilterView{Title: optionalString(req, "title")}
+	viewTitle, hasTitle := givenString(req, "title")
+	view := google.FilterView{Title: viewTitle}
 
 	if _, given := req.GetArguments()["start_row"]; given {
 		startRow := req.GetInt("start_row", 0)
@@ -600,7 +601,10 @@ func (r *registry) sheetsFilterView(ctx context.Context, req mcp.CallToolRequest
 	if viewID > 0 {
 		view.FilterViewID = viewID
 		fields := "range"
-		if view.Title != "" {
+		// Named at all, and the name is written — empty included, which is how a view goes
+		// back to being unnamed. Judged by the value instead, a view could be renamed but
+		// never unnamed.
+		if hasTitle {
 			fields += ",title"
 		}
 		if view.SortSpecs != nil {
@@ -642,7 +646,8 @@ func (r *registry) sheetsSlicer(ctx context.Context, req mcp.CallToolRequest) (*
 		return toolError(err), nil
 	}
 
-	spec := &google.SlicerSpec{Title: optionalString(req, "title")}
+	slicerTitle, hasSlicerTitle := givenString(req, "title")
+	spec := &google.SlicerSpec{Title: slicerTitle}
 
 	if _, given := req.GetArguments()["start_row"]; given {
 		startRow := req.GetInt("start_row", 0)
@@ -663,13 +668,24 @@ func (r *registry) sheetsSlicer(ctx context.Context, req mcp.CallToolRequest) (*
 	}
 
 	if slicerID := req.GetInt("slicer_id", 0); slicerID > 0 {
-		fields := "title"
+		// The mask used to carry the title whatever the call was about, so moving a slicer's
+		// range wiped the caption on it. Only what was named is written; an empty title is
+		// still a decision and still clears it.
+		var named []string
+		if hasSlicerTitle {
+			named = append(named, "title")
+		}
 		if spec.DataRange != nil {
-			fields += ",dataRange"
+			named = append(named, "dataRange")
 		}
 		if spec.ColumnIndex != nil {
-			fields += ",columnIndex"
+			named = append(named, "columnIndex")
 		}
+		if len(named) == 0 {
+			return toolError(fmt.Errorf("nothing to change on slicer %d: name title, the range, "+
+				"or column_index", slicerID)), nil
+		}
+		fields := strings.Join(named, ",")
 
 		if _, err := client.SheetsBatchUpdate(ctx, spreadsheetID, []google.SheetsRequest{{
 			UpdateSlicer: &google.UpdateSlicerRequest{SlicerID: slicerID, Spec: spec, Fields: fields},

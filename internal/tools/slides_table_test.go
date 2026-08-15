@@ -90,10 +90,51 @@ func TestReadTable(t *testing.T) {
 		`"column_span": 2`,
 		// White is a decision on a slide, not the default it is in a spreadsheet.
 		`#FFFFFF`,
+		// The body cells set no colour of their own. Said out loud, because a blank there
+		// reads as "this table has no text colour" and sends the next row's colour to a
+		// guess — it comes from the deck's theme, and gdocs_slides_read_theme has it.
+		`"text_color_inherited": true`,
 	} {
 		if !strings.Contains(answer, want) {
 			t.Errorf("the table reading should carry %s, got %s", want, answer)
 		}
+	}
+}
+
+// TestReadTableTellsAThemeColourFromALiteralOne: the two are different answers, and writing
+// a themed one back as a literal is how a table stops following the deck's palette — the
+// recolouring that fixes every other slide leaves that table in the old season's colours.
+func TestReadTableTellsAThemeColourFromALiteralOne(t *testing.T) {
+	const deck = `{
+	  "presentationId": "deck",
+	  "slides": [{"objectId": "slide1", "pageElements": [{
+	    "objectId": "table1",
+	    "table": {"rows": 1, "columns": 2, "tableRows": [{"tableCells": [
+	      {"location": {"rowIndex": 0, "columnIndex": 0}, "text": {"textElements": [
+	        {"textRun": {"content": "Из палитры\n", "style": {"foregroundColor": {
+	          "opaqueColor": {"themeColor": "ACCENT1"}}}}}]}},
+	      {"location": {"rowIndex": 0, "columnIndex": 1}, "text": {"textElements": [
+	        {"textRun": {"content": "Своим цветом\n", "style": {"foregroundColor": {
+	          "opaqueColor": {"rgbColor": {"red": 0.2, "green": 0.2, "blue": 0.2}}}}}}]}}
+	    ]}]}
+	  }]}]
+	}`
+
+	h := newHarness(t, newFakeGoogle(t).answer("/presentations/deck", deck))
+
+	answer := h.ok(h.registry.slidesReadTable(context.Background(), request(map[string]any{
+		"presentation_id": "deck",
+		"object_id":       "table1",
+	})))
+
+	if !strings.Contains(answer, `"theme_color": "ACCENT1"`) {
+		t.Errorf("a colour taken from the palette should be reported by its name, got %s", answer)
+	}
+	if !strings.Contains(answer, `"text_color": "#333333"`) {
+		t.Errorf("a colour chosen outright should be reported by its value, got %s", answer)
+	}
+	if strings.Contains(answer, `"text_color_inherited"`) {
+		t.Errorf("neither cell inherits, so nothing should say it does, got %s", answer)
 	}
 }
 
@@ -287,6 +328,47 @@ func TestStyleTableStylesCells(t *testing.T) {
 	checkGolden(t, "style_table_cells.json", h.bodyOf(t, 1))
 }
 
+// TestStyleTableStylesABand is the entry that keeps a table even: the body of a table is
+// named once instead of cell by cell, so the cell somebody forgot cannot stay a size larger
+// than its neighbours. The empty half of a merge is still skipped, which is what makes a
+// band safe to ask for at all.
+func TestStyleTableStylesABand(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).
+		answer("/presentations/deck:batchUpdate", emptyBatchReply).
+		answer("/presentations/deck", presentationWithFilledTable))
+
+	h.ok(h.registry.slidesStyleTable(context.Background(), request(map[string]any{
+		"presentation_id": "deck",
+		"object_id":       "table1",
+		"cell_styles": []any{
+			// Everything under the header row, every column: two cells hold text, the
+			// third row's missing cell and the merged-away one do not.
+			map[string]any{"rows": []any{float64(1)}, "font_size": float64(11.5)},
+		},
+	})))
+
+	checkGolden(t, "style_table_band.json", h.bodyOf(t, 1))
+}
+
+// TestStyleTableStylesARectangle: the same spelling fill and gdocs_docs_style_table use, so
+// one entry means the same thing wherever it is written.
+func TestStyleTableStylesARectangle(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).
+		answer("/presentations/deck:batchUpdate", emptyBatchReply).
+		answer("/presentations/deck", presentationWithFilledTable))
+
+	h.ok(h.registry.slidesStyleTable(context.Background(), request(map[string]any{
+		"presentation_id": "deck",
+		"object_id":       "table1",
+		"cell_styles": []any{
+			map[string]any{"row": float64(1), "column": float64(0),
+				"row_span": float64(2), "column_span": float64(2), "bold": true},
+		},
+	})))
+
+	checkGolden(t, "style_table_rectangle.json", h.bodyOf(t, 1))
+}
+
 func TestStyleTableCellRefusals(t *testing.T) {
 	h := newHarness(t, newFakeGoogle(t).
 		answer("/presentations/deck:batchUpdate", emptyBatchReply).
@@ -296,8 +378,25 @@ func TestStyleTableCellRefusals(t *testing.T) {
 		"presentation_id": "deck",
 		"object_id":       "table1",
 		"cell_styles":     []any{map[string]any{"row": float64(9), "column": float64(0), "bold": true}},
-	}))); !strings.Contains(message, "no cell (9,0)") {
+	}))); !strings.Contains(message, "(9,0)") {
 		t.Errorf("a cell outside the table should be refused by its coordinates, got %q", message)
+	}
+
+	// A band is checked the same way, and says which boundary is the problem.
+	if message := h.fail(h.registry.slidesStyleTable(context.Background(), request(map[string]any{
+		"presentation_id": "deck",
+		"object_id":       "table1",
+		"cell_styles":     []any{map[string]any{"rows": []any{float64(1), float64(9)}, "bold": true}},
+	}))); !strings.Contains(message, "rows reaches 9, and the table has 3") {
+		t.Errorf("a band past the last row should say so, got %q", message)
+	}
+
+	if message := h.fail(h.registry.slidesStyleTable(context.Background(), request(map[string]any{
+		"presentation_id": "deck",
+		"object_id":       "table1",
+		"cell_styles":     []any{map[string]any{"rows": []any{float64(2), float64(1)}, "bold": true}},
+	}))); !strings.Contains(message, "backwards") {
+		t.Errorf("a band that runs backwards should say so, got %q", message)
 	}
 
 	if message := h.fail(h.registry.slidesStyleTable(context.Background(), request(map[string]any{
@@ -440,6 +539,134 @@ func TestReorder(t *testing.T) {
 	})))
 
 	checkGolden(t, "reorder.json", h.bodyOf(t, 1))
+}
+
+// TestTextToolsReachIntoACell is the rule this whole set of arguments exists for: a summary
+// table is where the task numbers people want to click on live, and before this the text
+// tools stopped at the edge of a table. The only way to change one number was to rebuild the
+// table, which loses the template's own styling.
+func TestTextToolsReachIntoACell(t *testing.T) {
+	t.Run("a link on a number in a cell", func(t *testing.T) {
+		h := newHarness(t, newFakeGoogle(t).
+			answer("/presentations/deck:batchUpdate", emptyBatchReply).
+			answer("/presentations/deck", presentationWithFilledTable))
+
+		h.ok(h.registry.slidesLinkText(context.Background(), request(map[string]any{
+			"presentation_id": "deck",
+			"object_id":       "table1",
+			"row":             float64(1),
+			"column":          float64(1),
+			"links": []any{
+				map[string]any{"text": "12 мин", "url": "https://example.invalid/build"},
+			},
+		})))
+
+		checkGolden(t, "link_text_in_cell.json", h.bodyOf(t, 1))
+	})
+
+	t.Run("text of a cell", func(t *testing.T) {
+		h := newHarness(t, newFakeGoogle(t).
+			answer("/presentations/deck:batchUpdate", emptyBatchReply).
+			answer("/presentations/deck", presentationWithFilledTable))
+
+		h.ok(h.registry.slidesSetText(context.Background(), request(map[string]any{
+			"presentation_id": "deck",
+			"object_id":       "table1",
+			"row":             float64(1),
+			"column":          float64(1),
+			"text":            "9 мин",
+		})))
+
+		checkGolden(t, "set_text_in_cell.json", h.bodyOf(t, 1))
+	})
+
+	t.Run("style of a cell's text", func(t *testing.T) {
+		h := newHarness(t, newFakeGoogle(t).
+			answer("/presentations/deck:batchUpdate", emptyBatchReply).
+			answer("/presentations/deck", presentationWithFilledTable))
+
+		h.ok(h.registry.slidesSetTextStyle(context.Background(), request(map[string]any{
+			"presentation_id": "deck",
+			"object_id":       "table1",
+			"row":             float64(1),
+			"column":          float64(1),
+			"bold":            true,
+		})))
+
+		// The whole of a cell needs no reading first, so the batch is the only request.
+		checkGolden(t, "set_text_style_in_cell.json", h.bodyOf(t, 0))
+	})
+
+	t.Run("reading a cell's paragraphs", func(t *testing.T) {
+		h := newHarness(t, newFakeGoogle(t).answer("/presentations/deck", presentationWithFilledTable))
+
+		answer := h.ok(h.registry.slidesInspectTextStructure(context.Background(), request(map[string]any{
+			"presentation_id": "deck",
+			"object_id":       "table1",
+			"row":             float64(0),
+			"column":          float64(0),
+		})))
+
+		if !strings.Contains(answer, "Показатель") {
+			t.Errorf("reading a cell should report its text, got %s", answer)
+		}
+	})
+}
+
+// TestCellAddressingRefusals: every way of naming a cell wrongly has to say what was wrong,
+// because the alternative is a write that lands somewhere else in the table.
+func TestCellAddressingRefusals(t *testing.T) {
+	for _, probe := range []struct {
+		name      string
+		arguments map[string]any
+		want      string
+	}{
+		{
+			name:      "half a coordinate",
+			arguments: map[string]any{"object_id": "table1", "row": float64(1), "text": "x"},
+			want:      "row and column go together",
+		},
+		{
+			name: "outside the table",
+			arguments: map[string]any{"object_id": "table1", "row": float64(9),
+				"column": float64(0), "text": "x"},
+			want: "outside a table of 3×2",
+		},
+		{
+			// Row 2 column 0 was swallowed by the merge that starts at row 1: writing there
+			// would go into that cell, on top of what it already holds.
+			name: "inside a merge",
+			arguments: map[string]any{"object_id": "table1", "row": float64(2),
+				"column": float64(0), "text": "x"},
+			want: "inside the merge that starts at row 1 column 0",
+		},
+		{
+			name: "not a table at all",
+			arguments: map[string]any{"object_id": "title1", "row": float64(0),
+				"column": float64(0), "text": "x"},
+			want: "row and column only mean something on a table",
+		},
+	} {
+		t.Run(probe.name, func(t *testing.T) {
+			deck := presentationWithFilledTable
+			if probe.arguments["object_id"] == "title1" {
+				deck = presentationWithBody
+			}
+			h := newHarness(t, newFakeGoogle(t).
+				answer("/presentations/deck:batchUpdate", emptyBatchReply).
+				answer("/presentations/deck", deck))
+
+			arguments := map[string]any{"presentation_id": "deck"}
+			for key, value := range probe.arguments {
+				arguments[key] = value
+			}
+
+			message := h.fail(h.registry.slidesSetText(context.Background(), request(arguments)))
+			if !strings.Contains(message, probe.want) {
+				t.Errorf("the refusal should say %q, got %q", probe.want, message)
+			}
+		})
+	}
 }
 
 // TestReorderInsistsOnEverySlide keeps a caller from reordering a deck by naming half of

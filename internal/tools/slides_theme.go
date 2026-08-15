@@ -52,7 +52,10 @@ func (r *registry) registerSlidesTheme(srv *server.MCPServer) {
 			"the room around them, which is half of why a rebuilt slide looks different from its sample "+
 			"even when every font matches."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
-		mcp.WithString("object_id", mcp.Required(), mcp.Description("Text box or placeholder to style.")),
+		mcp.WithString("object_id", mcp.Required(), mcp.Description(
+			"Text box or placeholder to style, or the table when row and column are named.")),
+		mcp.WithNumber("row", mcp.Description(cellRowHelp)),
+		mcp.WithNumber("column", mcp.Description(cellColumnHelp)),
 		mcp.WithString("scope", mcp.DefaultString(scopeAll), mcp.Description(
 			"Which paragraphs: "+scopeAll+" for all of them, "+scopeTitle+" for the first line, "+
 				"a nesting level like 0, 1 or 2 for one level of a list, or paragraph:0, paragraph:1 "+
@@ -482,13 +485,18 @@ func (r *registry) slidesSetParagraphStyle(ctx context.Context, req mcp.CallTool
 			"remove_bullets or reset")), nil
 	}
 
+	cell, err := textCell(req)
+	if err != nil {
+		return toolError(err), nil
+	}
+
 	client, err := r.client(ctx)
 	if err != nil {
 		return toolError(err), nil
 	}
 
 	scope := strings.ToLower(req.GetString("scope", scopeAll))
-	ranges, err := styleRanges(ctx, client, req, presentationID, objectID, scope)
+	ranges, err := styleRanges(ctx, client, req, presentationID, objectID, scope, cell)
 	if err != nil {
 		return toolError(err), nil
 	}
@@ -501,10 +509,11 @@ func (r *registry) slidesSetParagraphStyle(ctx context.Context, req mcp.CallTool
 		if len(fields) > 0 {
 			requests = append(requests, google.Request{
 				UpdateParagraphStyle: &google.UpdateParagraphStyleRequest{
-					ObjectID:  objectID,
-					TextRange: textRange,
-					Style:     style,
-					Fields:    strings.Join(fields, ","),
+					ObjectID:     objectID,
+					CellLocation: cell,
+					TextRange:    textRange,
+					Style:        style,
+					Fields:       strings.Join(fields, ","),
 				},
 			})
 		}
@@ -515,17 +524,18 @@ func (r *registry) slidesSetParagraphStyle(ctx context.Context, req mcp.CallTool
 		if removeBullets {
 			requests = append(requests, google.Request{
 				DeleteParagraphBullets: &google.DeleteParagraphBulletsRequest{
-					ObjectID: objectID, TextRange: textRange,
+					ObjectID: objectID, CellLocation: cell, TextRange: textRange,
 				},
 			})
 		}
 		if bulletPreset != "" {
 			requests = append(requests,
 				google.Request{DeleteParagraphBullets: &google.DeleteParagraphBulletsRequest{
-					ObjectID: objectID, TextRange: textRange,
+					ObjectID: objectID, CellLocation: cell, TextRange: textRange,
 				}},
 				google.Request{CreateParagraphBullets: &google.CreateParagraphBulletsRequest{
-					ObjectID: objectID, TextRange: textRange, BulletPreset: bulletPreset,
+					ObjectID: objectID, CellLocation: cell, TextRange: textRange,
+					BulletPreset: bulletPreset,
 				}},
 			)
 		}

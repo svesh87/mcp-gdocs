@@ -126,19 +126,29 @@ with the reference, the readings and one more tool, and ask for the rest as it n
 or the same thing as a header, `X-Gdocs-Discovery: on`, for a client that lets a person set
 headers rather than a URL. Then `gdocs_find_tools` takes a few words — "nested list", "picture
 as a slide background", "copy a tab into another workbook" — and adds what matches to **that
-connection**, for the rest of the session. Another client on the same path is unaffected.
+connection**, for the rest of the session, with each tool's arguments in full. Another client
+on the same path is unaffected. The plain Russian nouns of the trade are understood too, since
+the names and descriptions themselves stay English.
 
 Saying nothing gets everything, and that is the point of putting the switch on the client
-rather than on the server: it only works with a client that re-reads its tool list when the
-server says the list changed. Claude Code does. Codex, as far as anyone has been able to
-establish, does not — a list taken at connection time stays — so a server that always started
-narrow would be one Codex could not write with. The client that knows it can cope says so; the
-one that cannot says nothing and is given everything.
+rather than on the server: a tool added mid-session is announced with
+`notifications/tools/list_changed`, and a client that does not act on that notification never
+sees the name it just asked for. Claude Code re-reads its list. Codex, as far as anyone has
+been able to establish, does not — a list taken at connection time stays — so a server that
+always started narrow would be one Codex could not write with. The client that knows it can
+cope says so; the one that cannot says nothing and is given everything.
 
-Two things never change with the switch. `--tools` is still the ceiling: discovery hands out
-what the configuration allowed and nothing else. And removal never arrives by asking, whatever
-`--tools` allowed — a tool that appears because an agent named it is the agent's decision,
-while removal is the operator's, made once at startup.
+The announcement is delivered down the listening stream a client opens with GET, and only
+there: with no such stream it is dropped and nothing says so. That is why `gdocs_call_tool`
+exists alongside `gdocs_find_tools`. It is there from the start of the connection and calls any
+allowed tool by name with its arguments as an object, so the work goes through whether or not
+the client's list ever catches up.
+
+One thing never changes with the switch: `--tools` is the ceiling. Discovery hands out what the
+configuration allowed and nothing else, removal included — an operator who typed `slides-delete`
+meant it, and an agent that cannot ask for the one tool that takes a stray shape off a slide
+rebuilds the slide instead. A name the configuration left out is refused with the group an
+operator would have to add.
 
 ## Tools
 
@@ -146,7 +156,9 @@ A hundred and forty-nine of them, covering every request the three APIs have exc
 five that reach BigQuery. A server started without `--allow-write` registers the reading
 ones and nothing else, and the four that touch the disk — `gdocs_drive_export_file`,
 `gdocs_drive_download_file`, `gdocs_drive_import_file` and `gdocs_slides_export_images` —
-appear only when `--files-dir` names a directory they may use.
+appear only when `--files-dir` names a directory they may use. Two more exist only on a
+connection that asked for discovery — `gdocs_find_tools` and `gdocs_call_tool` — because
+they are how the other hundred and forty-nine arrive there.
 
 They come in pairs on purpose: whatever a reading tool reports, a writing tool takes back
 in the same units. No tool answers "make this look like that" — the job is to build a deck

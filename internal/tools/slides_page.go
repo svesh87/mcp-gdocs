@@ -676,6 +676,21 @@ func describeLine(line *google.Line) *describedLine {
 // This is describeColor without its one concession to Sheets, where white is the fill of
 // every cell and reporting it buries the coloured ones. On a slide white is a decision —
 // white text on a dark panel — and swallowing it loses the text when the slide is copied.
+// describeTextColor says what a run's colour is, in the two ways it can be said: a literal
+// value, or a name from the deck's palette.
+//
+// Both are reported because they are not the same answer. A copy that writes a themed colour
+// back as a literal looks right and stops following the palette, so recolouring the deck
+// afterwards leaves that text behind in the old season's colour. Nothing at all means the run
+// sets no colour and takes whatever it inherits — read the theme rather than guessing.
+func describeTextColor(colour *google.OptionalColor) (string, string) {
+	if colour == nil || colour.OpaqueColor == nil {
+		return "", ""
+	}
+
+	return slideColor(colour.OpaqueColor.RGBColor), colour.OpaqueColor.ThemeColor
+}
+
 func slideColor(colour *google.RGBColor) string {
 	if colour == nil {
 		return ""

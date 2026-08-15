@@ -220,6 +220,22 @@ func optionalString(req mcp.CallToolRequest, name string) string {
 	return strings.TrimSpace(req.GetString(name, ""))
 }
 
+// givenString reads an argument and says whether it was there at all.
+//
+// The two are different answers and the difference is a decision the caller made. A chart
+// beside a caption on a slide should carry no title of its own, a note on a cell has to be
+// removable, a picture's alt text has to be clearable — and every one of those is spelled
+// "": not naming the argument means "leave it alone", naming it empty means "make it
+// empty". Dropped as one, an empty string leaves the old value in place and the answer
+// still says the call worked.
+func givenString(req mcp.CallToolRequest, name string) (string, bool) {
+	if _, given := req.GetArguments()[name]; !given {
+		return "", false
+	}
+
+	return strings.TrimSpace(req.GetString(name, "")), true
+}
+
 // objectList reads a list of objects out of the arguments, naming the argument in every
 // error: a caller that got the shape wrong needs to know which one.
 func objectList(req mcp.CallToolRequest, name string) ([]map[string]any, error) {

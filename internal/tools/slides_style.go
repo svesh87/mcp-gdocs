@@ -28,14 +28,21 @@ type paragraphRun struct {
 	Style google.TextStyle
 }
 
-// readParagraphs reads a text box as paragraphs with their nesting and their style.
-func readParagraphs(ctx context.Context, client *google.Client, presentationID, objectID string) ([]paragraphRun, error) {
-	presentation, err := client.Presentation(ctx, presentationID, levelsMask)
+// readParagraphs reads a text box, or one cell of a table, as paragraphs with their nesting
+// and their style.
+func readParagraphs(ctx context.Context, client *google.Client, presentationID, objectID string,
+	cell *google.CellLocation) ([]paragraphRun, error) {
+	mask := levelsMask
+	if cell != nil {
+		mask = cellTextMask
+	}
+
+	presentation, err := client.Presentation(ctx, presentationID, mask)
 	if err != nil {
 		return nil, err
 	}
 
-	shape, err := findShape(presentation, objectID)
+	elements, err := findTextElements(presentation, objectID, cell)
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +50,7 @@ func readParagraphs(ctx context.Context, client *google.Client, presentationID, 
 	var paragraphs []paragraphRun
 	var current *paragraphRun
 
-	for _, element := range shapeElements(shape) {
+	for _, element := range elements {
 		switch {
 		case element.ParagraphMarker != nil:
 			run := paragraphRun{Level: 0}
@@ -95,7 +102,10 @@ func (r *registry) registerSlidesLinks(srv *server.MCPServer) {
 			"number has to be set rather than copied. Read it with gdocs_slides_inspect_title_style, "+
 			"which reports inherited values too."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
-		mcp.WithString("object_id", mcp.Required(), mcp.Description("Text box to style.")),
+		mcp.WithString("object_id", mcp.Required(), mcp.Description(
+			"Text box to style, or the table when row and column are named.")),
+		mcp.WithNumber("row", mcp.Description(cellRowHelp)),
+		mcp.WithNumber("column", mcp.Description(cellColumnHelp)),
 		mcp.WithString("scope", mcp.DefaultString(scopeAll), mcp.Description(
 			"Which part to style: "+scopeAll+" for the whole box, "+scopeTitle+" for its first line, "+
 				"or a number for one nesting level — 0 is the line outside the list, 1 the top-level "+
@@ -141,7 +151,10 @@ func (r *registry) registerSlidesLinks(srv *server.MCPServer) {
 			"Use it when a copied or hand-set style turned out wrong — clearing is the only way back, "+
 			"because there is no value that means \"inherit\"."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
-		mcp.WithString("object_id", mcp.Required(), mcp.Description("Text box to clear.")),
+		mcp.WithString("object_id", mcp.Required(), mcp.Description(
+			"Text box to clear, or the table when row and column are named.")),
+		mcp.WithNumber("row", mcp.Description(cellRowHelp)),
+		mcp.WithNumber("column", mcp.Description(cellColumnHelp)),
 		mcp.WithArray("fields", mcp.WithStringItems(), mcp.Description(
 			"Style fields to clear, e.g. bold, fontSize, fontFamily, weightedFontFamily, foregroundColor. "+
 				"Without any, all of them are cleared.")),
@@ -159,13 +172,17 @@ func (r *registry) registerSlidesLinks(srv *server.MCPServer) {
 	), r.slidesResetTextStyle)
 
 	srv.AddTool(mcp.NewTool("gdocs_slides_link_text",
-		mcp.WithDescription("Turn a piece of text in a text box into a link. "+
+		mcp.WithDescription("Turn a piece of text in a text box, or in one cell of a table, into a link. "+
 			"Rebuilding a slide replaces its text, and a link in the original — the incident number, the "+
 			"board, the document — is not part of that text: it has to be put back, or the new slide "+
-			"quietly loses what the old one pointed at. gdocs_slides_inspect_text_structure reports the "+
-			"links a sample has."),
+			"quietly loses what the old one pointed at. A summary table is where this matters most: the "+
+			"task numbers people want to click on live in its cells, and row and column are how they are "+
+			"reached. gdocs_slides_inspect_text_structure reports the links a sample has."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
-		mcp.WithString("object_id", mcp.Required(), mcp.Description("Text box holding the text.")),
+		mcp.WithString("object_id", mcp.Required(), mcp.Description(
+			"Text box holding the text, or the table when row and column are named.")),
+		mcp.WithNumber("row", mcp.Description(cellRowHelp)),
+		mcp.WithNumber("column", mcp.Description(cellColumnHelp)),
 		mcp.WithArray("links", mcp.Required(), mcp.Description(
 			"Links to place, as a list of objects: {\"text\": \"PM-101\", \"url\": \"https://…\"}. "+
 				"Each text is found in the box and the first occurrence becomes the link."),
@@ -286,13 +303,18 @@ func (r *registry) slidesSetTextStyle(ctx context.Context, req mcp.CallToolReque
 			"underline, foreground_color, theme_color or alignment")), nil
 	}
 
+	cell, err := textCell(req)
+	if err != nil {
+		return toolError(err), nil
+	}
+
 	client, err := r.client(ctx)
 	if err != nil {
 		return toolError(err), nil
 	}
 
 	scope := strings.ToLower(req.GetString("scope", scopeAll))
-	ranges, err := styleRanges(ctx, client, req, presentationID, objectID, scope)
+	ranges, err := styleRanges(ctx, client, req, presentationID, objectID, scope, cell)
 	if err != nil {
 		return toolError(err), nil
 	}
@@ -302,18 +324,20 @@ func (r *registry) slidesSetTextStyle(ctx context.Context, req mcp.CallToolReque
 		if len(fields) > 0 {
 			applied := *style
 			requests = append(requests, google.Request{UpdateTextStyle: &google.UpdateTextStyleRequest{
-				ObjectID:  objectID,
-				TextRange: textRange,
-				Style:     &applied,
-				Fields:    strings.Join(fields, ","),
+				ObjectID:     objectID,
+				CellLocation: cell,
+				TextRange:    textRange,
+				Style:        &applied,
+				Fields:       strings.Join(fields, ","),
 			}})
 		}
 		if alignment != "" {
 			requests = append(requests, google.Request{UpdateParagraphStyle: &google.UpdateParagraphStyleRequest{
-				ObjectID:  objectID,
-				TextRange: textRange,
-				Style:     &google.ParagraphStyle{Alignment: alignment},
-				Fields:    "alignment",
+				ObjectID:     objectID,
+				CellLocation: cell,
+				TextRange:    textRange,
+				Style:        &google.ParagraphStyle{Alignment: alignment},
+				Fields:       "alignment",
 			}})
 		}
 	}
@@ -340,7 +364,7 @@ func (r *registry) slidesSetTextStyle(ctx context.Context, req mcp.CallToolReque
 
 // styleRanges turns a scope into the ranges to apply a style over.
 func styleRanges(ctx context.Context, client *google.Client, req mcp.CallToolRequest,
-	presentationID, objectID, scope string) ([]*google.Range, error) {
+	presentationID, objectID, scope string, cell *google.CellLocation) ([]*google.Range, error) {
 	switch scope {
 	case scopeAll, "":
 		return []*google.Range{google.AllText()}, nil
@@ -377,7 +401,7 @@ func styleRanges(ctx context.Context, client *google.Client, req mcp.CallToolReq
 			return nil, fmt.Errorf("scope %q: a paragraph is named as paragraph:0, paragraph:1 and so on", scope)
 		}
 
-		paragraphs, err := readParagraphs(ctx, client, presentationID, objectID)
+		paragraphs, err := readParagraphs(ctx, client, presentationID, objectID, cell)
 		if err != nil {
 			return nil, err
 		}
@@ -396,7 +420,7 @@ func styleRanges(ctx context.Context, client *google.Client, req mcp.CallToolReq
 
 	switch scope {
 	case scopeTitle:
-		text, err := shapeTextOf(ctx, client, presentationID, objectID)
+		text, err := shapeTextOf(ctx, client, presentationID, objectID, cell)
 		if err != nil {
 			return nil, err
 		}
@@ -413,7 +437,7 @@ func styleRanges(ctx context.Context, client *google.Client, req mcp.CallToolReq
 			scope, scopeAll, scopeTitle)
 	}
 
-	paragraphs, err := readParagraphs(ctx, client, presentationID, objectID)
+	paragraphs, err := readParagraphs(ctx, client, presentationID, objectID, cell)
 	if err != nil {
 		return nil, err
 	}
@@ -459,6 +483,11 @@ func (r *registry) slidesResetTextStyle(ctx context.Context, req mcp.CallToolReq
 		}
 	}
 
+	cell, err := textCell(req)
+	if err != nil {
+		return toolError(err), nil
+	}
+
 	client, err := r.client(ctx)
 	if err != nil {
 		return toolError(err), nil
@@ -469,7 +498,7 @@ func (r *registry) slidesResetTextStyle(ctx context.Context, req mcp.CallToolReq
 	// only if the rest can be given back to what it inherits, and a whole-box reset would
 	// take the heading's bold with it.
 	scope := strings.ToLower(optionalString(req, "scope"))
-	ranges, err := styleRanges(ctx, client, req, presentationID, objectID, scope)
+	ranges, err := styleRanges(ctx, client, req, presentationID, objectID, scope, cell)
 	if err != nil {
 		return toolError(err), nil
 	}
@@ -480,10 +509,11 @@ func (r *registry) slidesResetTextStyle(ctx context.Context, req mcp.CallToolReq
 	for _, textRange := range ranges {
 		requests = append(requests, google.Request{
 			UpdateTextStyle: &google.UpdateTextStyleRequest{
-				ObjectID:  objectID,
-				TextRange: textRange,
-				Style:     &google.TextStyle{},
-				Fields:    strings.Join(fields, ","),
+				ObjectID:     objectID,
+				CellLocation: cell,
+				TextRange:    textRange,
+				Style:        &google.TextStyle{},
+				Fields:       strings.Join(fields, ","),
 			},
 		})
 	}
@@ -521,12 +551,17 @@ func (r *registry) slidesLinkText(ctx context.Context, req mcp.CallToolRequest) 
 		return toolError(fmt.Errorf("links is empty")), nil
 	}
 
+	cell, err := textCell(req)
+	if err != nil {
+		return toolError(err), nil
+	}
+
 	client, err := r.client(ctx)
 	if err != nil {
 		return toolError(err), nil
 	}
 
-	text, err := shapeTextOf(ctx, client, presentationID, objectID)
+	text, err := shapeTextOf(ctx, client, presentationID, objectID, cell)
 	if err != nil {
 		return toolError(err), nil
 	}
@@ -559,10 +594,11 @@ func (r *registry) slidesLinkText(ctx context.Context, req mcp.CallToolRequest) 
 
 		requests = append(requests, google.Request{
 			UpdateTextStyle: &google.UpdateTextStyleRequest{
-				ObjectID:  objectID,
-				TextRange: google.FixedRange(start, end),
-				Style:     &google.TextStyle{Link: &google.Link{URL: address}},
-				Fields:    "link",
+				ObjectID:     objectID,
+				CellLocation: cell,
+				TextRange:    google.FixedRange(start, end),
+				Style:        &google.TextStyle{Link: &google.Link{URL: address}},
+				Fields:       "link",
 			},
 		})
 
@@ -574,10 +610,15 @@ func (r *registry) slidesLinkText(ctx context.Context, req mcp.CallToolRequest) 
 		return toolError(err), nil
 	}
 
-	return resultJSON(map[string]any{
+	answer := map[string]any{
 		"presentation_id": presentationID,
 		"object_id":       objectID,
 		"links":           placed,
 		"replies":         len(response.Replies),
-	})
+	}
+	if cell != nil {
+		answer["row"], answer["column"] = cell.RowIndex, cell.ColumnIndex
+	}
+
+	return resultJSON(answer)
 }

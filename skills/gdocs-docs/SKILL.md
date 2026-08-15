@@ -29,6 +29,12 @@ set of groups — `docs-read`, `docs-write`, `docs-delete` — and removal is ne
 default set. A name absent from the listing is the configuration talking; do what can be
 done and say plainly what could not.
 
+On a connection that started with only the readings and `gdocs_find_tools`, missing is not
+the same as switched off: ask for what the job needs, in the words of the job, and the answer
+carries each tool's arguments in full. A name it added that the client still does not list is
+called through `gdocs_call_tool`, by name, with the arguments as an object. Only then is a
+refusal the configuration talking, and it names the group an operator would have to add.
+
 Two references sit beside this file:
 
 - **[references/controls.md](references/controls.md)** — every knob: what reads it, what

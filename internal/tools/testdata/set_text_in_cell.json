@@ -1,0 +1,39 @@
+{
+  "requests": [
+    {
+      "deleteParagraphBullets": {
+        "objectId": "table1",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 1
+        },
+        "textRange": {
+          "type": "ALL"
+        }
+      }
+    },
+    {
+      "deleteText": {
+        "objectId": "table1",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 1
+        },
+        "textRange": {
+          "type": "ALL"
+        }
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "table1",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 1
+        },
+        "text": "9 мин",
+        "insertionIndex": 0
+      }
+    }
+  ]
+}

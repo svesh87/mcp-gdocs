@@ -345,8 +345,10 @@ func TestInspectWrongKindOfObject(t *testing.T) {
 		"object_id":       "table1",
 	}))
 
-	if message := requireError(t, result, err); !strings.Contains(message, "is a table, not a text box") {
-		t.Errorf("expected the refusal to name the kind of object, got %q", message)
+	// A table is no longer the wrong kind of object, only an address without its cell, and
+	// the refusal has to say which half is missing rather than "not a text box".
+	if message := requireError(t, result, err); !strings.Contains(message, "name row and column") {
+		t.Errorf("expected the refusal to say how to reach a cell, got %q", message)
 	}
 }
 
@@ -499,7 +501,7 @@ func TestSetText(t *testing.T) {
 func TestSetTextEmptyOnlyDeletes(t *testing.T) {
 	// An empty text means "clear the box": bullets off, text out, and nothing inserted,
 	// because inserting an empty string is an error in the API.
-	requests := setTextRequests("title1", "", true)
+	requests := setTextRequests("title1", "", true, nil)
 
 	if len(requests) != 2 {
 		t.Fatalf("clearing a box should be two removals, got %d", len(requests))
@@ -516,7 +518,7 @@ func TestSetTextEmptyOnlyDeletes(t *testing.T) {
 // slide: the placeholder is empty, and Slides refuses a deleteText over an empty range
 // with "startIndex 0 must be less than the endIndex 0".
 func TestSetTextIntoEmptyPlaceholder(t *testing.T) {
-	requests := setTextRequests("title1", "Итоги квартала", false)
+	requests := setTextRequests("title1", "Итоги квартала", false, nil)
 
 	if len(requests) != 1 || requests[0].InsertText == nil {
 		t.Fatalf("filling an empty box should be one insert, got %+v", requests)
@@ -642,12 +644,12 @@ func TestListTextTabs(t *testing.T) {
 }
 
 func TestNestedListRequestsRefusesAHeadingOnly(t *testing.T) {
-	if _, err := nestedListRequests("body1", "Только заголовок", "", true, true); err == nil {
+	if _, err := nestedListRequests("body1", "Только заголовок", "", true, true, nil); err == nil {
 		t.Error("a heading with no list under it should be refused")
 	}
 
 	// Without a plain heading the same one line is a perfectly good one-item list.
-	if _, err := nestedListRequests("body1", "Одна строка", "", true, false); err != nil {
+	if _, err := nestedListRequests("body1", "Одна строка", "", true, false, nil); err != nil {
 		t.Errorf("a single bulleted line is a list: %v", err)
 	}
 }

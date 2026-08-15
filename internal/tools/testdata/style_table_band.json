@@ -1,0 +1,42 @@
+{
+  "requests": [
+    {
+      "updateTextStyle": {
+        "objectId": "table1",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 0
+        },
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "fontSize": {
+            "magnitude": 11.5,
+            "unit": "PT"
+          }
+        },
+        "fields": "fontSize"
+      }
+    },
+    {
+      "updateTextStyle": {
+        "objectId": "table1",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 1
+        },
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "fontSize": {
+            "magnitude": 11.5,
+            "unit": "PT"
+          }
+        },
+        "fields": "fontSize"
+      }
+    }
+  ]
+}

@@ -58,7 +58,12 @@ func (r *registry) registerSlidesLayout(srv *server.MCPServer) {
 	srv.AddTool(mcp.NewTool("gdocs_slides_read_table",
 		mcp.WithDescription("Read a table on a slide: every cell, the column widths and the row heights. "+
 			"This is how a table in one deck gets reproduced in another — read its shape here, then "+
-			"pass the same widths to gdocs_slides_create_table_with_text."),
+			"pass the same widths to gdocs_slides_create_table_with_text. "+
+			"A cell's text colour comes back in whichever of three ways it is really set: text_color "+
+			"for a colour chosen outright, theme_color for one taken from the deck's palette, and "+
+			"text_color_inherited when the cell sets none and takes the deck's — read that one from "+
+			"gdocs_slides_read_theme rather than guessing, or a row added to a template's table comes "+
+			"out a different colour from the rows above it."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
 		mcp.WithString("object_id", mcp.Required(), mcp.Description("Object identifier of the table.")),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -245,11 +250,18 @@ func (r *registry) registerSlidesLayout(srv *server.MCPServer) {
 				"the cell follows gdocs_slides_set_theme_colors rather than keeping the value."),
 			mcp.Items(map[string]any{"type": "object"})),
 		mcp.WithArray("cell_styles", mcp.Description(
-			"How the text of particular cells looks, as a list of objects: "+
+			"How the text of cells looks, as a list of objects: "+
 				"{\"row\": 0, \"column\": 1, \"bold\": true, \"italic\": false, \"font_size\": 14, "+
 				"\"font_family\": \"Rubik\", \"alignment\": \"CENTER\", "+
 				"\"text_color\": {\"red\": 0.26, \"green\": 0.26, \"blue\": 0.26}}. "+
 				"\"theme_color\": \"DARK2\" paints the words from the palette instead. "+
+				"An entry covers more than one cell in either of two ways: row_span and column_span "+
+				"make it a rectangle, the way fill and gdocs_docs_style_table spell one; or "+
+				"\"rows\": [1, 7] and \"columns\": [0, 3] name bands by their boundaries, inclusive — "+
+				"\"rows\": [1] runs to the last row, and leaving one of them out means all of it. "+
+				"\"rows\": [1] alone is the whole body of a table under its header, which is the entry "+
+				"that stops a 4×8 table from being twenty-eight identical objects with one cell "+
+				"forgotten in the middle. "+
 				"This is the shape gdocs_slides_read_table reports, cell for cell: a table whose header "+
 				"is centred and whose first column is bold cannot be described by one style per column, "+
 				"and a copy made that way reads as a different table."),
@@ -624,24 +636,10 @@ func (r *registry) slidesStyleTable(ctx context.Context, req mcp.CallToolRequest
 // range. Empty cells are skipped — Slides refuses a text update on a cell with no text,
 // and the empty ones in a real table are the halves of merged blocks.
 func cellStyleRequests(objectID string, entry map[string]any, table *google.Table) ([]google.Request, error) {
-	row, ok := intField(entry, "row")
-	if !ok || row < 0 {
-		return nil, fmt.Errorf("row is missing or negative")
+	cells, err := cellsOf(entry, table)
+	if err != nil {
+		return nil, err
 	}
-	column, ok := intField(entry, "column")
-	if !ok || column < 0 {
-		return nil, fmt.Errorf("column is missing or negative")
-	}
-	if row >= table.Rows || column >= table.Columns {
-		return nil, fmt.Errorf("the table is %d×%d, so there is no cell (%d,%d)",
-			table.Rows, table.Columns, row, column)
-	}
-
-	if strings.TrimSpace(cellTextAt(table, row, column)) == "" {
-		return nil, nil
-	}
-
-	location := &google.CellLocation{RowIndex: row, ColumnIndex: column}
 
 	style := &google.TextStyle{}
 	var fields []string
@@ -699,38 +697,137 @@ func cellStyleRequests(objectID string, entry map[string]any, table *google.Tabl
 		fields = append(fields, "foregroundColor")
 	}
 
-	var requests []google.Request
-
-	if len(fields) > 0 {
-		requests = append(requests, google.Request{
-			UpdateTextStyle: &google.UpdateTextStyleRequest{
-				ObjectID:     objectID,
-				CellLocation: location,
-				TextRange:    google.AllText(),
-				Style:        style,
-				Fields:       strings.Join(fields, ","),
-			},
-		})
-	}
-
-	if alignment := strings.ToUpper(stringField(entry, "alignment")); alignment != "" {
+	alignment := strings.ToUpper(stringField(entry, "alignment"))
+	if alignment != "" {
 		switch alignment {
 		case "START", "CENTER", "END", "JUSTIFIED":
 		default:
 			return nil, fmt.Errorf("alignment %q is not one of START, CENTER, END, JUSTIFIED", alignment)
 		}
-		requests = append(requests, google.Request{
-			UpdateParagraphStyle: &google.UpdateParagraphStyleRequest{
-				ObjectID:     objectID,
-				CellLocation: location,
-				TextRange:    google.AllText(),
-				Style:        &google.ParagraphStyle{Alignment: alignment},
-				Fields:       "alignment",
-			},
-		})
+	}
+
+	var requests []google.Request
+
+	for _, location := range cells {
+		// Empty cells are skipped — Slides refuses a text update on a cell with no text,
+		// and the empty ones in a real table are the halves of merged blocks. Over a range
+		// this is what makes "the whole body of the table" a safe thing to ask for.
+		if strings.TrimSpace(cellTextAt(table, location.RowIndex, location.ColumnIndex)) == "" {
+			continue
+		}
+		at := location
+
+		if len(fields) > 0 {
+			requests = append(requests, google.Request{
+				UpdateTextStyle: &google.UpdateTextStyleRequest{
+					ObjectID:     objectID,
+					CellLocation: &at,
+					TextRange:    google.AllText(),
+					Style:        style,
+					Fields:       strings.Join(fields, ","),
+				},
+			})
+		}
+
+		if alignment != "" {
+			requests = append(requests, google.Request{
+				UpdateParagraphStyle: &google.UpdateParagraphStyleRequest{
+					ObjectID:     objectID,
+					CellLocation: &at,
+					TextRange:    google.AllText(),
+					Style:        &google.ParagraphStyle{Alignment: alignment},
+					Fields:       "alignment",
+				},
+			})
+		}
 	}
 
 	return requests, nil
+}
+
+// cellsOf expands one entry of cell_styles into the cells it covers.
+//
+// Three forms, because a real table is styled in all three ways and naming every cell by
+// hand is where a table loses one. A single cell is row and column; a rectangle is those
+// with row_span and column_span, the same spelling fill and gdocs_docs_style_table already
+// use; and a band is rows and columns as boundaries — rows [1,7] is the body of an
+// eight-row table, rows [1] runs to the last row, and leaving columns out means all of
+// them. The 8×4 table that used to be twenty-eight identical objects in one call is one.
+func cellsOf(entry map[string]any, table *google.Table) ([]google.CellLocation, error) {
+	_, hasRows := entry["rows"]
+	_, hasColumns := entry["columns"]
+
+	if !hasRows && !hasColumns {
+		area, err := tableRangeOf(entry, table)
+		if err != nil {
+			return nil, err
+		}
+
+		var cells []google.CellLocation
+		for row := area.Location.RowIndex; row < area.Location.RowIndex+area.RowSpan; row++ {
+			for column := area.Location.ColumnIndex; column < area.Location.ColumnIndex+area.ColumnSpan; column++ {
+				cells = append(cells, google.CellLocation{RowIndex: row, ColumnIndex: column})
+			}
+		}
+
+		return cells, nil
+	}
+
+	firstRow, lastRow, err := bandOf(entry, "rows", table.Rows)
+	if err != nil {
+		return nil, err
+	}
+	firstColumn, lastColumn, err := bandOf(entry, "columns", table.Columns)
+	if err != nil {
+		return nil, err
+	}
+
+	var cells []google.CellLocation
+	for row := firstRow; row <= lastRow; row++ {
+		for column := firstColumn; column <= lastColumn; column++ {
+			cells = append(cells, google.CellLocation{RowIndex: row, ColumnIndex: column})
+		}
+	}
+
+	return cells, nil
+}
+
+// bandOf reads one boundary pair: [from] runs to the end, [from, to] is inclusive, and a
+// missing argument means the whole extent.
+func bandOf(entry map[string]any, name string, extent int) (int, int, error) {
+	raw, ok := entry[name]
+	if !ok {
+		return 0, extent - 1, nil
+	}
+
+	list, ok := raw.([]any)
+	if !ok || len(list) == 0 || len(list) > 2 {
+		return 0, 0, fmt.Errorf("%s is a pair of boundaries like [1, 7], or [1] to run to the end", name)
+	}
+
+	bounds := make([]int, 0, 2)
+	for _, value := range list {
+		number, ok := value.(float64)
+		if !ok || number != float64(int(number)) || number < 0 {
+			return 0, 0, fmt.Errorf("%s holds %v, and boundaries are whole numbers from 0", name, value)
+		}
+		bounds = append(bounds, int(number))
+	}
+
+	first := bounds[0]
+	last := extent - 1
+	if len(bounds) == 2 {
+		last = bounds[1]
+	}
+
+	if first > last {
+		return 0, 0, fmt.Errorf("%s is [%d, %d], which is backwards", name, first, last)
+	}
+	if last >= extent {
+		return 0, 0, fmt.Errorf("%s reaches %d, and the table has %d", name, last, extent)
+	}
+
+	return first, last, nil
 }
 
 // cellTextAt is the text of one cell, or nothing when the cell is not there.
@@ -769,7 +866,8 @@ func tableRangeOf(entry map[string]any, table *google.Table) (*google.TableRange
 	}
 
 	if row+rowSpan > table.Rows || column+columnSpan > table.Columns {
-		return nil, fmt.Errorf("reaches past the table, which is %d×%d", table.Rows, table.Columns)
+		return nil, fmt.Errorf("(%d,%d) spanning %d×%d reaches past the table, which is %d×%d",
+			row, column, rowSpan, columnSpan, table.Rows, table.Columns)
 	}
 
 	return &google.TableRange{
@@ -820,9 +918,15 @@ func (r *registry) slidesReadTable(ctx context.Context, req mcp.CallToolRequest)
 		FontSize   float64 `json:"font_size_pt,omitempty"`
 		Bold       *bool   `json:"bold,omitempty"`
 		Color      string  `json:"text_color,omitempty"`
-		Background string  `json:"background,omitempty"`
-		Alignment  string  `json:"alignment,omitempty"`
-		Vertical   string  `json:"content_alignment,omitempty"`
+		// ThemeColor is the palette name, when the colour was picked from the theme's row
+		// instead of chosen. ColorInherited says the cell sets no colour of its own and
+		// takes the deck's — which is a third answer, and the one that used to look like
+		// "this table has no text colour" and sent a caller guessing.
+		ThemeColor     string `json:"theme_color,omitempty"`
+		ColorInherited bool   `json:"text_color_inherited,omitempty"`
+		Background     string `json:"background,omitempty"`
+		Alignment      string `json:"alignment,omitempty"`
+		Vertical       string `json:"content_alignment,omitempty"`
 	}
 
 	rows := make([][]string, 0, len(table.TableRows))
@@ -854,9 +958,11 @@ func (r *registry) slidesReadTable(ctx context.Context, req mcp.CallToolRequest)
 					described.FontSize = style.FontSize.InPoints()
 				}
 				described.Bold = style.Bold
-				if style.ForegroundColor != nil && style.ForegroundColor.OpaqueColor != nil {
-					described.Color = slideColor(style.ForegroundColor.OpaqueColor.RGBColor)
-				}
+				described.Color, described.ThemeColor = describeTextColor(style.ForegroundColor)
+				// Said out loud rather than left blank: a cell whose words take the deck's
+				// own colour is not a cell with no colour, and a row added beside it has to
+				// take the same one — from gdocs_slides_read_theme, not from a guess.
+				described.ColorInherited = described.Color == "" && described.ThemeColor == ""
 				described.Alignment = alignment
 			}
 

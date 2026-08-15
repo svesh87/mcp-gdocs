@@ -276,6 +276,77 @@ func TestSheetsFormatCells(t *testing.T) {
 	checkGolden(t, "sheets_format_cells.json", h.bodyOf(t, 1))
 }
 
+// TestAnEmptyStringIsADecision covers the class of defect the deck of 2026.08 ran into: an
+// argument named with an empty value was dropped as if it had not been named at all, so the
+// old value stayed and the answer still said the call had worked. Nothing that can be set
+// here should be impossible to unset.
+func TestAnEmptyStringIsADecision(t *testing.T) {
+	t.Run("a note comes off a cell", func(t *testing.T) {
+		h := newHarness(t, newFakeGoogle(t).
+			answer(":batchUpdate", `{"spreadsheetId": "book", "replies": [{}]}`).
+			answer("/spreadsheets/book", spreadsheetInfo))
+
+		h.ok(h.registry.sheetsFormatCells(context.Background(), request(map[string]any{
+			"spreadsheet_id": "book",
+			"sheet_title":    "Отделы",
+			"start_row":      float64(0),
+			"end_row":        float64(1),
+			"start_column":   float64(0),
+			"end_column":     float64(3),
+			"note":           "",
+			"link":           "",
+		})))
+
+		// Both are in the mask and neither carries a value: that pair is what clears them.
+		body := string(h.bodyOf(t, 1))
+		if !strings.Contains(body, `"fields": "userEnteredFormat.textFormat(link),note"`) {
+			t.Errorf("the mask should name the note and the link so both are written as empty, got %s", body)
+		}
+		if strings.Contains(body, `"note":`) || strings.Contains(body, `"link":`) {
+			t.Errorf("neither should carry a value, got %s", body)
+		}
+	})
+
+	t.Run("alt text can be taken off", func(t *testing.T) {
+		h := newHarness(t, newFakeGoogle(t).answer("/presentations/deck:batchUpdate", emptyBatchReply))
+
+		h.ok(h.registry.slidesSetAltText(context.Background(), request(map[string]any{
+			"presentation_id": "deck",
+			"object_id":       "image1",
+			"description":     "",
+		})))
+
+		// The description is sent as an empty string; the title, which was not named, is
+		// not sent at all and stays whatever it was.
+		body := string(h.bodyOf(t, 0))
+		if !strings.Contains(body, `"description": ""`) {
+			t.Errorf("an empty description should go out as one, got %s", body)
+		}
+		if strings.Contains(body, `"title"`) {
+			t.Errorf("what was not named should not be written, got %s", body)
+		}
+
+		if message := h.fail(h.registry.slidesSetAltText(context.Background(), request(map[string]any{
+			"presentation_id": "deck",
+			"object_id":       "image1",
+		}))); !strings.Contains(message, "title, a description, or both") {
+			t.Errorf("naming neither is still nothing to do, got %q", message)
+		}
+	})
+
+	t.Run("a workbook cannot be left unnamed", func(t *testing.T) {
+		h := newHarness(t, newFakeGoogle(t).answer("/spreadsheets/book", spreadsheetInfo))
+
+		message := h.fail(h.registry.sheetsUpdateProperties(context.Background(), request(map[string]any{
+			"spreadsheet_id": "book",
+			"title":          "",
+		})))
+		if !strings.Contains(message, "has to have a name") {
+			t.Errorf("an empty name should be refused rather than ignored, got %q", message)
+		}
+	})
+}
+
 func TestSheetsFormatCellsRefusals(t *testing.T) {
 	h := newHarness(t, newFakeGoogle(t).answer("/spreadsheets/book", spreadsheetInfo))
 

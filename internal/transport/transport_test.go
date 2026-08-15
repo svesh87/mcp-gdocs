@@ -149,3 +149,50 @@ func TestHandlerRoutes(t *testing.T) {
 		t.Errorf("a family endpoint should demand a token too, got %d", recorder.Code)
 	}
 }
+
+// TestSessionKeepsItsServer covers the trap that made discovery look broken: a client opens
+// its listening stream at the same path without the query parameter, that stream lands on the
+// full server, and the notification saying the tool list grew is never sent anywhere.
+func TestSessionKeepsItsServer(t *testing.T) {
+	answer := func(name string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// The first request of a session is what the transport answers with an
+			// identifier; afterwards the client repeats it.
+			if r.Header.Get(SessionHeader) == "" {
+				w.Header().Set(SessionHeader, "session-1")
+			}
+			_, _ = w.Write([]byte(name))
+		})
+	}
+
+	switched := switchOnDiscovery(answer("full"), answer("narrow"))
+
+	ask := func(target, session string) string {
+		request := httptest.NewRequest(http.MethodGet, target, nil)
+		if session != "" {
+			request.Header.Set(SessionHeader, session)
+		}
+		recorder := httptest.NewRecorder()
+		switched.ServeHTTP(recorder, request)
+
+		return recorder.Body.String()
+	}
+
+	if got := ask(MCPPath+"?discovery=1", ""); got != "narrow" {
+		t.Fatalf("a new connection asking for discovery should get the narrow server, got %q", got)
+	}
+
+	// The listening stream, opened at the bare path. Without the session being remembered
+	// this is where a client stops hearing about its own tools.
+	if got := ask(MCPPath, "session-1"); got != "narrow" {
+		t.Errorf("a request carrying a discovery session should stay on the narrow server, got %q", got)
+	}
+
+	// A session nobody has seen is a new connection, and the switch decides for it as before.
+	if got := ask(MCPPath, "session-2"); got != "full" {
+		t.Errorf("an unknown session with no switch should get the full server, got %q", got)
+	}
+	if got := ask(MCPPath, ""); got != "full" {
+		t.Errorf("saying nothing should still get the full server, got %q", got)
+	}
+}

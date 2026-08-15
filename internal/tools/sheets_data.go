@@ -28,8 +28,12 @@ func (r *registry) registerSheetsData(srv *server.MCPServer) {
 		mcp.WithString("sheet_title", mcp.Required(), mcp.Description("Tab the data is on.")),
 		mcp.WithString("type", mcp.DefaultString("COLUMN"), mcp.Description(
 			"COLUMN, BAR, LINE, AREA, STEPPED_AREA, SCATTER or PIE.")),
-		mcp.WithString("title", mcp.Description("Title over the chart.")),
-		mcp.WithString("subtitle", mcp.Description("Line under the title.")),
+		mcp.WithString("title", mcp.Description(
+			"Title over the chart. Leave it out — or pass an empty string, which means the same "+
+				"thing here — and the chart is drawn without one. That is what a chart going onto a "+
+				"slide wants: the slide already carries a caption above it, and a chart with its own "+
+				"title puts two headings in a row.")),
+		mcp.WithString("subtitle", mcp.Description("Line under the title. Empty means none, as above.")),
 		mcp.WithNumber("labels_column", mcp.Required(), mcp.Description(
 			"Column holding what runs along the bottom — the names of the bars, or the slices of a pie.")),
 		mcp.WithArray("value_columns", mcp.Required(), mcp.Description(

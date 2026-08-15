@@ -1,0 +1,36 @@
+{
+  "requests": [
+    {
+      "updateTextStyle": {
+        "objectId": "table1",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 0
+        },
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "bold": true
+        },
+        "fields": "bold"
+      }
+    },
+    {
+      "updateTextStyle": {
+        "objectId": "table1",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 1
+        },
+        "textRange": {
+          "type": "ALL"
+        },
+        "style": {
+          "bold": true
+        },
+        "fields": "bold"
+      }
+    }
+  ]
+}

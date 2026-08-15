@@ -69,7 +69,8 @@ func (r *registry) registerDocsExtra(srv *server.MCPServer) {
 		mcp.WithString("tab_id", mcp.Required(), mcp.Description("Tab to change.")),
 		mcp.WithString("title", mcp.Description("New name.")),
 		mcp.WithNumber("index", mcp.Description("New position among its siblings.")),
-		mcp.WithString("icon_emoji", mcp.Description("New icon.")),
+		mcp.WithString("icon_emoji", mcp.Description(
+			"New icon. An empty string takes the icon off; leaving the argument out keeps it.")),
 	), r.docsUpdateTab)
 
 	srv.AddTool(mcp.NewTool("gdocs_docs_insert_chip",
@@ -263,11 +264,16 @@ func (r *registry) docsUpdateTab(ctx context.Context, req mcp.CallToolRequest) (
 	properties := &google.DocsTabProperties{TabID: tabID}
 	mask := &docsStyleFields{}
 
-	if title := optionalString(req, "title"); title != "" {
+	if title, given := givenString(req, "title"); given {
+		if title == "" {
+			return toolError(fmt.Errorf("title is empty, and a tab has to have a name")), nil
+		}
 		properties.Title = title
 		mask.add("title")
 	}
-	if emoji := optionalString(req, "icon_emoji"); emoji != "" {
+	// The emoji is the opposite case: an empty one takes the icon off, which is the only
+	// way back from an icon put on by mistake.
+	if emoji, given := givenString(req, "icon_emoji"); given {
 		properties.IconEmoji = emoji
 		mask.add("iconEmoji")
 	}

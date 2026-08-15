@@ -84,13 +84,21 @@ shape with one), `gdocs_slides_create_line`, `gdocs_slides_insert_image`,
 | merges | `read_table` (`row_span`, `column_span`) | `style_table` (`merge`) |
 | cell fills | `read_table` | `style_table` (`fill`) |
 | per-cell text style and alignment | `read_table` | `style_table` (`cell_styles`) |
+| the same style over many cells | `read_table` | `cell_styles` with `row_span`/`column_span`, or with `rows`/`columns` as boundaries — `"rows": [1]` is the whole body under the header |
 | vertical alignment of cell content | `read_table` | `style_table` (`content_alignment`) |
 | the lines of a table | `read_table` | `gdocs_slides_set_table_borders` — by position (ALL, OUTER, INNER, one side), across the whole table or a rectangle |
 | more rows or columns after it exists | `read_table` | `gdocs_slides_edit_table` (`insert_rows`, `insert_columns`) |
 | taking a merge apart | `read_table` | `gdocs_slides_edit_table` (`unmerge`) |
+| text, style, list or link **inside one cell** | `inspect_text_structure` with `row`/`column` | `set_text`, `set_text_style`, `reset_text_style`, `set_paragraph_style`, `set_list`, `link_text` — all of them take `row`/`column` |
+| the colour a cell's words are really in | `read_table`: `text_color` (chosen), `theme_color` (from the palette), `text_color_inherited` (the deck's own — take it from `read_theme`) | `style_table` (`cell_styles`), or `set_text_style` with `row`/`column` |
 
 Borders are the one part of a table not written per cell: a position and a rectangle, so
 the frame comes out even instead of showing seams where two cells disagreed.
+
+A table is not a wall the text tools stop at. Every tool that writes text takes `row` and
+`column`, and they are the coordinates the cells report rather than positions in the row — a
+merge takes the cells it swallowed out of the table. This is how a task number in a summary
+table becomes a link: `link_text` with the cell's coordinates, not a rebuilt table.
 
 ## Pictures, charts and video
 

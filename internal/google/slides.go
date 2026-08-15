@@ -346,10 +346,14 @@ type ReplaceShapesWithChartRequest struct {
 }
 
 // UpdateAltTextRequest gives an element the description a screen reader reads out.
+//
+// The two texts are pointers because this request has no field mask: Slides keeps whatever
+// it is not sent, so an empty string dropped as empty is indistinguishable from silence and
+// alt text set by mistake could never be taken off.
 type UpdateAltTextRequest struct {
-	ObjectID    string `json:"objectId"`
-	Title       string `json:"title,omitempty"`
-	Description string `json:"description,omitempty"`
+	ObjectID    string  `json:"objectId"`
+	Title       *string `json:"title,omitempty"`
+	Description *string `json:"description,omitempty"`
 }
 
 // RerouteLineRequest makes a connector find its way between the shapes it is attached to

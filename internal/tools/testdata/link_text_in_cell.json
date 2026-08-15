@@ -1,0 +1,24 @@
+{
+  "requests": [
+    {
+      "updateTextStyle": {
+        "objectId": "table1",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 1
+        },
+        "textRange": {
+          "type": "FIXED_RANGE",
+          "startIndex": 0,
+          "endIndex": 6
+        },
+        "style": {
+          "link": {
+            "url": "https://example.invalid/build"
+          }
+        },
+        "fields": "link"
+      }
+    }
+  ]
+}

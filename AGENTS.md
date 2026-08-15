@@ -27,6 +27,14 @@ below are the ones that are expensive to rediscover; the rest of the reasoning i
   line is what a mistake costs — a stray shape is a moment's work, a tab is data nobody has
   any more. A refusal names the missing group, because an operator reading "not allowed" has
   no way to find out what to add.
+
+  **`--tools` is the whole of the ceiling.** Discovery hands out everything the
+  configuration allowed, removal included; a catalogue that cut removal out of that ceiling
+  was tried and taken back out, because it added no safety — the operator who typed
+  `slides-delete` meant it — and it did add detours: an agent that cannot ask for the tool
+  that takes a stray shape off a slide rebuilds the slide instead, and rebuilding is the
+  operation that loses work. What discovery refuses is a name the configuration never
+  allowed, and the refusal names the group an operator would have to add.
 - **No arbitrary `batchUpdate`.** A caller must not be able to hand this server its own
   list of API requests. Assembled batches are exactly what puts text boxes at invented
   coordinates and leaves a deck looking broken. Every tool builds its own requests.

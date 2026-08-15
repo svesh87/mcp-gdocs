@@ -160,13 +160,15 @@ func (r *registry) registerSheets(srv *server.MCPServer) {
 				"digits as 0% stored as PERCENT, and the interface reports the cell as something else.")),
 		mcp.WithString("link", mcp.Description(
 			"Address the cells point at. This is a cell's own link, so the text stays text — writing "+
-				"=HYPERLINK() instead would replace the value with a formula.")),
+				"=HYPERLINK() instead would replace the value with a formula. An empty string takes "+
+				"the link off again.")),
 		mcp.WithString("link_display", mcp.Description(
 			"LINKED to draw a linked cell as a link, PLAIN_TEXT to leave it looking like text. This "+
 				"belongs to the cell rather than to the link, and a sample carries it on cells whose "+
 				"link has since been taken away.")),
 		mcp.WithString("note", mcp.Description(
-			"Note to hang on every cell of the range — the small comment that shows on hover.")),
+			"Note to hang on every cell of the range — the small comment that shows on hover. An "+
+				"empty string clears the notes that are there.")),
 	), r.sheetsFormatCells)
 
 	srv.AddTool(mcp.NewTool("gdocs_sheets_set_validation",
@@ -666,8 +668,10 @@ func (r *registry) sheetsFormatCells(ctx context.Context, req mcp.CallToolReques
 
 	cell := google.CellData{UserEnteredFormat: format}
 	// The note is not part of the format: it sits beside it on the cell, and it needs its
-	// own name in the mask or it is silently dropped.
-	if note := optionalString(req, "note"); note != "" {
+	// own name in the mask or it is silently dropped. An empty note is how a note is taken
+	// off, so it goes in the mask too — the field carries no value and the mask is what
+	// says to write it.
+	if note, given := givenString(req, "note"); given {
 		cell.Note = note
 		fields = append(fields, "note")
 	}
@@ -964,8 +968,12 @@ func parseCellFormat(req mcp.CallToolRequest) (*google.CellFormat, []string, err
 		textFields = append(textFields, "fontFamily")
 	}
 
-	if link := optionalString(req, "link"); link != "" {
-		text.Link = &google.CellLink{URI: link}
+	// An empty link takes the link off, which is the only way back from a cell that was
+	// linked by mistake: the mask names the field and the value is left out.
+	if link, given := givenString(req, "link"); given {
+		if link != "" {
+			text.Link = &google.CellLink{URI: link}
+		}
 		textFields = append(textFields, "link")
 	}
 

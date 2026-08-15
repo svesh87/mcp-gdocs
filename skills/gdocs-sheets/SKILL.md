@@ -32,6 +32,13 @@ Two references sit beside this file:
 - **[references/pitfalls.md](references/pitfalls.md)** — the traps, each with what it does
   to the sheet and what to do instead, ending with what the API will not report at all.
 
+On a connection that started with only the readings and `gdocs_find_tools`, ask that for the
+rest — it answers with each tool's arguments in full, which matters most for
+`gdocs_sheets_update_chart`: it writes a chart's whole specification back, so a call built
+from a guess at its arguments erases the data the chart draws. A name it added that the
+client still does not list is called through `gdocs_call_tool`, by name, with the arguments
+as an object.
+
 ## 1. Read the sample
 
 1. **`gdocs_sheets_info`** — the tabs, their sizes, their frozen rows, and the count of

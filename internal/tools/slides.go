@@ -71,6 +71,15 @@ const structureMask = "slides(pageElements(objectId,shape(text(textElements(star
 	"style),textRun(content,style(" +
 	google.TextStyleFields + ",link)))))))"
 
+// cellTextMask reads the text inside table cells the way structureMask reads the text
+// inside a box: indexes, bullets, styles and links. A cell named by row and column is read
+// with this, because everything the text tools do to a box they now do to a cell, and they
+// need the same fields to do it.
+const cellTextMask = "slides(pageElements(objectId,table(rows,columns,tableRows(tableCells(" +
+	"location,rowSpan,columnSpan,text(textElements(startIndex,endIndex," +
+	"paragraphMarker(bullet(nestingLevel,glyph,bulletStyle(foregroundColor,fontSize)),style)," +
+	"textRun(content,style(" + google.TextStyleFields + ",link)))))))))"
+
 // pagesMask lists the slides and what sits on them.
 const pagesMask = "presentationId,title,pageSize,layouts(objectId,layoutProperties(name,displayName))," +
 	"slides(objectId,slideProperties(layoutObjectId,isSkipped),layoutProperties(name,displayName)," +
@@ -92,11 +101,15 @@ func (r *registry) registerSlides(srv *server.MCPServer) {
 	r.registerSlidesExtra(srv)
 
 	srv.AddTool(mcp.NewTool("gdocs_slides_inspect_text_structure",
-		mcp.WithDescription("Read what is inside one text box of a slide: its paragraphs, their text, "+
-			"and how deep each one sits in the list. Look here before changing a slide — the object "+
-			"identifiers and the existing structure are what every other slides tool takes as input."),
+		mcp.WithDescription("Read what is inside one text box of a slide, or one cell of a table: its "+
+			"paragraphs, their text, and how deep each one sits in the list. Look here before changing "+
+			"a slide — the object identifiers and the existing structure are what every other slides "+
+			"tool takes as input."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
-		mcp.WithString("object_id", mcp.Required(), mcp.Description("Object identifier of the text box.")),
+		mcp.WithString("object_id", mcp.Required(), mcp.Description(
+			"Object identifier of the text box, or of the table when row and column are named.")),
+		mcp.WithNumber("row", mcp.Description(cellRowHelp)),
+		mcp.WithNumber("column", mcp.Description(cellColumnHelp)),
 		mcp.WithReadOnlyHintAnnotation(true),
 	), r.slidesInspectTextStructure)
 
@@ -175,10 +188,14 @@ func (r *registry) registerSlides(srv *server.MCPServer) {
 		mcp.WithDescription("Replace the text of one text box with plain text, keeping the box where it is. "+
 			"The new text inherits the styling of its placeholder, which is what keeps a filled-in slide "+
 			"looking like the template it came from. For a title plus bullets use "+
-			"gdocs_slides_replace_body_nested_list instead."),
+			"gdocs_slides_replace_body_nested_list instead. With row and column it replaces the text of "+
+			"one cell of a table, which is the same job with the same styling behind it."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
-		mcp.WithString("object_id", mcp.Required(), mcp.Description("Object identifier of the text box.")),
+		mcp.WithString("object_id", mcp.Required(), mcp.Description(
+			"Object identifier of the text box, or of the table when row and column are named.")),
 		mcp.WithString("text", mcp.Required(), mcp.Description("The text to put in it. Newlines make paragraphs.")),
+		mcp.WithNumber("row", mcp.Description(cellRowHelp)),
+		mcp.WithNumber("column", mcp.Description(cellColumnHelp)),
 	), r.slidesSetText)
 
 	srv.AddTool(mcp.NewTool("gdocs_slides_set_list",
@@ -190,7 +207,10 @@ func (r *registry) registerSlides(srv *server.MCPServer) {
 			"and its whole text — gdocs_slides_list shortens text for its overview, and a line copied from "+
 			"there lands in the deck with the ellipsis included."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
-		mcp.WithString("object_id", mcp.Required(), mcp.Description("Object identifier of the text box.")),
+		mcp.WithString("object_id", mcp.Required(), mcp.Description(
+			"Object identifier of the text box, or of the table when row and column are named.")),
+		mcp.WithNumber("row", mcp.Description(cellRowHelp)),
+		mcp.WithNumber("column", mcp.Description(cellColumnHelp)),
 		mcp.WithArray("items", mcp.Required(), mcp.Description(
 			"Lines as a list of objects: {\"text\": \"…\", \"level\": 0}. Level 0 is a top-level bullet, "+
 				"1 is nested under it, and so on to any depth the sample has."),
@@ -246,6 +266,17 @@ func (r *registry) registerSlides(srv *server.MCPServer) {
 
 const presentationIDHelp = "Presentation identifier, the part of its address between /d/ and /edit."
 
+// The two arguments that turn a text tool on a table into a text tool on one of its cells.
+// Written once because every text tool takes them and they have to mean the same thing in
+// all of them: the coordinates a cell reports, not its place in the row.
+const (
+	cellRowHelp = "Row of the cell to work in, from 0, when object_id is a table. " +
+		"Take the coordinates from gdocs_slides_read_table: a merge takes the cells it " +
+		"swallowed out of the table, so under a first column merged down five rows the next " +
+		"row starts at column 1. Goes together with column."
+	cellColumnHelp = "Column of that cell, from 0. Goes together with row."
+)
+
 // slidesInspectTextStructure reports the paragraphs of a text box before anything is
 // changed. Looking first is the habit this whole package is built around.
 func (r *registry) slidesInspectTextStructure(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -258,17 +289,27 @@ func (r *registry) slidesInspectTextStructure(ctx context.Context, req mcp.CallT
 		return toolError(err), nil
 	}
 
+	cell, err := textCell(req)
+	if err != nil {
+		return toolError(err), nil
+	}
+
 	client, err := r.client(ctx)
 	if err != nil {
 		return toolError(err), nil
 	}
 
-	presentation, err := client.Presentation(ctx, presentationID, structureMask)
+	mask := structureMask
+	if cell != nil {
+		mask = cellTextMask
+	}
+
+	presentation, err := client.Presentation(ctx, presentationID, mask)
 	if err != nil {
 		return toolError(err), nil
 	}
 
-	shape, err := findShape(presentation, objectID)
+	elements, err := findTextElements(presentation, objectID, cell)
 	if err != nil {
 		return toolError(err), nil
 	}
@@ -337,7 +378,11 @@ func (r *registry) slidesInspectTextStructure(ctx context.Context, req mcp.CallT
 		FontFamily string  `json:"font_family,omitempty"`
 		Bold       *bool   `json:"bold,omitempty"`
 		Color      string  `json:"text_color,omitempty"`
-		Alignment  string  `json:"alignment,omitempty"`
+		// ThemeColor is the palette name when the author picked a colour from the theme's
+		// row rather than a custom one. Reported apart from the value, because writing it
+		// back as a literal stops the text following the deck's palette.
+		ThemeColor string `json:"theme_color,omitempty"`
+		Alignment  string `json:"alignment,omitempty"`
 		// The room around the paragraph, which gdocs_slides_set_paragraph_style takes back
 		// in the same units: spacing as a percentage, spaces in points, indents in EMU.
 		//
@@ -361,7 +406,7 @@ func (r *registry) slidesInspectTextStructure(ctx context.Context, req mcp.CallT
 	var paragraphs []paragraph
 	var current *paragraph
 
-	for _, element := range shapeElements(shape) {
+	for _, element := range elements {
 		switch {
 		case element.ParagraphMarker != nil:
 			paragraphs = append(paragraphs, paragraph{
@@ -445,8 +490,8 @@ func (r *registry) slidesInspectTextStructure(ctx context.Context, req mcp.CallT
 				if current.Bold == nil {
 					current.Bold = style.Bold
 				}
-				if current.Color == "" && style.ForegroundColor != nil && style.ForegroundColor.OpaqueColor != nil {
-					current.Color = slideColor(style.ForegroundColor.OpaqueColor.RGBColor)
+				if current.Color == "" && current.ThemeColor == "" {
+					current.Color, current.ThemeColor = describeTextColor(style.ForegroundColor)
 				}
 
 				// Every field, not a chosen few: one word small and bold beside another
@@ -465,10 +510,7 @@ func (r *registry) slidesInspectTextStructure(ctx context.Context, req mcp.CallT
 						piece.FontFamily = style.WeightedFontFamily.FontFamily
 					}
 				}
-				if style.ForegroundColor != nil && style.ForegroundColor.OpaqueColor != nil {
-					piece.Color = slideColor(style.ForegroundColor.OpaqueColor.RGBColor)
-					piece.ThemeColor = style.ForegroundColor.OpaqueColor.ThemeColor
-				}
+				piece.Color, piece.ThemeColor = describeTextColor(style.ForegroundColor)
 				if style.BackgroundColor != nil && style.BackgroundColor.OpaqueColor != nil {
 					piece.Background = slideColor(style.BackgroundColor.OpaqueColor.RGBColor)
 				}
@@ -936,27 +978,37 @@ func (r *registry) slidesSetText(ctx context.Context, req mcp.CallToolRequest) (
 		return toolError(err), nil
 	}
 
+	cell, err := textCell(req)
+	if err != nil {
+		return toolError(err), nil
+	}
+
 	client, err := r.client(ctx)
 	if err != nil {
 		return toolError(err), nil
 	}
 
-	existing, err := shapeTextOf(ctx, client, presentationID, objectID)
+	existing, err := shapeTextOf(ctx, client, presentationID, objectID, cell)
 	if err != nil {
 		return toolError(err), nil
 	}
 
-	requests := setTextRequests(objectID, text, existing != "")
+	requests := setTextRequests(objectID, text, existing != "", cell)
 
 	if _, err := client.SlidesBatchUpdate(ctx, presentationID, requests); err != nil {
 		return toolError(err), nil
 	}
 
-	return resultJSON(map[string]any{
+	answer := map[string]any{
 		"presentation_id": presentationID,
 		"object_id":       objectID,
 		"characters":      utf16Length(text),
-	})
+	}
+	if cell != nil {
+		answer["row"], answer["column"] = cell.RowIndex, cell.ColumnIndex
+	}
+
+	return resultJSON(answer)
 }
 
 // setTextRequests empties a text box and puts plain text in it.
@@ -965,7 +1017,7 @@ func (r *registry) slidesSetText(ctx context.Context, req mcp.CallToolRequest) (
 // over an empty box with "startIndex 0 must be less than the endIndex 0", and an empty
 // box is the normal state of a placeholder on a slide that was just added from a layout —
 // which is exactly when a caller fills one in.
-func setTextRequests(objectID, text string, hasText bool) []google.Request {
+func setTextRequests(objectID, text string, hasText bool, cell *google.CellLocation) []google.Request {
 	var requests []google.Request
 
 	if hasText {
@@ -974,38 +1026,137 @@ func setTextRequests(objectID, text string, hasText bool) []google.Request {
 		// how plain paragraphs end up wearing the markers of whatever was there before.
 		requests = append(requests,
 			google.Request{DeleteParagraphBullets: &google.DeleteParagraphBulletsRequest{
-				ObjectID: objectID, TextRange: google.AllText()}},
+				ObjectID: objectID, CellLocation: cell, TextRange: google.AllText()}},
 			google.Request{DeleteText: &google.DeleteTextRequest{
-				ObjectID: objectID, TextRange: google.AllText()}},
+				ObjectID: objectID, CellLocation: cell, TextRange: google.AllText()}},
 		)
 	}
 
 	if text != "" {
 		requests = append(requests, google.Request{
-			InsertText: &google.InsertTextRequest{ObjectID: objectID, Text: text, InsertionIndex: 0},
+			InsertText: &google.InsertTextRequest{
+				ObjectID: objectID, CellLocation: cell, Text: text, InsertionIndex: 0},
 		})
 	}
 
 	return requests
 }
 
-// shapeTextOf reads the text currently in a text box.
+// shapeTextOf reads the text currently in a text box, or in one cell of a table.
 //
 // It costs one read before a write, and it buys the difference between a box that has to
 // be emptied first and one that must not be: both writing tools build a different batch
 // for each.
-func shapeTextOf(ctx context.Context, client *google.Client, presentationID, objectID string) (string, error) {
-	presentation, err := client.Presentation(ctx, presentationID, textContentMask)
+func shapeTextOf(ctx context.Context, client *google.Client, presentationID, objectID string,
+	cell *google.CellLocation) (string, error) {
+	mask := textContentMask
+	if cell != nil {
+		mask = cellTextMask
+	}
+
+	presentation, err := client.Presentation(ctx, presentationID, mask)
 	if err != nil {
 		return "", err
 	}
 
-	shape, err := findShape(presentation, objectID)
+	elements, err := findTextElements(presentation, objectID, cell)
 	if err != nil {
 		return "", err
 	}
 
-	return shapeText(shape), nil
+	return textOfElements(elements), nil
+}
+
+// textCell reads the row and column that point a text tool at a cell of a table.
+//
+// Every tool that writes text on a slide takes them, and they are what makes a table a
+// place text can be written rather than an object to be rebuilt. The pair is all or
+// nothing: a row without a column is a caller who meant something and said half of it, and
+// guessing the other half writes into the wrong cell.
+func textCell(req mcp.CallToolRequest) (*google.CellLocation, error) {
+	arguments := req.GetArguments()
+	_, hasRow := arguments["row"]
+	_, hasColumn := arguments["column"]
+
+	switch {
+	case !hasRow && !hasColumn:
+		return nil, nil
+	case hasRow != hasColumn:
+		return nil, fmt.Errorf("row and column go together: name both to reach a cell of a table, " +
+			"or neither to work on a text box")
+	}
+
+	row, column := req.GetInt("row", -1), req.GetInt("column", -1)
+	if row < 0 || column < 0 {
+		return nil, fmt.Errorf("row and column count from 0 and cannot be negative, got %d and %d",
+			row, column)
+	}
+
+	return &google.CellLocation{RowIndex: row, ColumnIndex: column}, nil
+}
+
+// findTextElements is the text of a shape, or of one cell of a table.
+//
+// One place, because every text tool needs the same thing and they used to need it only of
+// shapes: a table was where text tools stopped. That was the wrong boundary — a summary
+// table is exactly where the incident numbers a reader wants to click on live, and
+// rebuilding the table to change one of them loses the template's own styling.
+func findTextElements(presentation *google.Presentation, objectID string,
+	cell *google.CellLocation) ([]google.TextElement, error) {
+	if cell == nil {
+		shape, err := findShape(presentation, objectID)
+		if err != nil {
+			return nil, err
+		}
+
+		return shapeElements(shape), nil
+	}
+
+	_, element, err := findElement(presentation, objectID)
+	if err != nil {
+		return nil, err
+	}
+	if element.Table == nil {
+		return nil, fmt.Errorf("%s is a %s, and row and column only mean something on a table",
+			objectID, elementKind(*element))
+	}
+
+	table := element.Table
+	if cell.RowIndex >= table.Rows || cell.ColumnIndex >= table.Columns {
+		return nil, fmt.Errorf("row %d column %d is outside a table of %d×%d",
+			cell.RowIndex, cell.ColumnIndex, table.Rows, table.Columns)
+	}
+
+	found := cellAt(table, cell.RowIndex, cell.ColumnIndex)
+	if found == nil {
+		// A merged-away coordinate is not an empty cell: the API would write into the cell
+		// that swallowed it, on top of what is already there.
+		if owner := mergedInto(table, cell.RowIndex, cell.ColumnIndex); owner != nil {
+			return nil, fmt.Errorf("row %d column %d is inside the merge that starts at row %d "+
+				"column %d: name that cell instead", cell.RowIndex, cell.ColumnIndex,
+				owner.RowIndex, owner.ColumnIndex)
+		}
+
+		return nil, fmt.Errorf("row %d column %d is not a cell of this table", cell.RowIndex, cell.ColumnIndex)
+	}
+	if found.Text == nil {
+		return nil, nil
+	}
+
+	return found.Text.TextElements, nil
+}
+
+// textOfElements joins the text of a run of elements, newlines and all: the API counts its
+// indexes over exactly this.
+func textOfElements(elements []google.TextElement) string {
+	var builder strings.Builder
+	for _, element := range elements {
+		if element.TextRun != nil {
+			builder.WriteString(element.TextRun.Content)
+		}
+	}
+
+	return builder.String()
 }
 
 // slidesReplaceBodyNestedList rebuilds a body slide as a native nested list.
@@ -1026,19 +1177,24 @@ func (r *registry) slidesSetList(ctx context.Context, req mcp.CallToolRequest) (
 
 	plainFirstLine := req.GetBool("plain_first_line", false)
 
+	cell, err := textCell(req)
+	if err != nil {
+		return toolError(err), nil
+	}
+
 	client, err := r.client(ctx)
 	if err != nil {
 		return toolError(err), nil
 	}
 
-	existing, err := shapeTextOf(ctx, client, presentationID, objectID)
+	existing, err := shapeTextOf(ctx, client, presentationID, objectID, cell)
 	if err != nil {
 		return toolError(err), nil
 	}
 
 	text := listText(items)
 	requests, err := nestedListRequests(objectID, text, req.GetString("bullet_preset", defaultBulletPreset),
-		existing != "", plainFirstLine)
+		existing != "", plainFirstLine, cell)
 	if err != nil {
 		return toolError(err), nil
 	}
@@ -1134,7 +1290,8 @@ func listText(items []listItem) string {
 //
 // The two removals are skipped when the box is empty — the usual state of a placeholder
 // on a freshly added slide — because Slides refuses both over an empty range.
-func nestedListRequests(objectID, text, bulletPreset string, hasText, plainFirstLine bool) ([]google.Request, error) {
+func nestedListRequests(objectID, text, bulletPreset string, hasText, plainFirstLine bool,
+	cell *google.CellLocation) ([]google.Request, error) {
 	titleEnd := firstLineEnd(text)
 	length := utf16Length(text)
 
@@ -1151,9 +1308,9 @@ func nestedListRequests(objectID, text, bulletPreset string, hasText, plainFirst
 	if hasText {
 		requests = append(requests,
 			google.Request{DeleteParagraphBullets: &google.DeleteParagraphBulletsRequest{
-				ObjectID: objectID, TextRange: google.AllText()}},
+				ObjectID: objectID, CellLocation: cell, TextRange: google.AllText()}},
 			google.Request{DeleteText: &google.DeleteTextRequest{
-				ObjectID: objectID, TextRange: google.AllText()}},
+				ObjectID: objectID, CellLocation: cell, TextRange: google.AllText()}},
 		)
 	}
 
@@ -1165,9 +1322,11 @@ func nestedListRequests(objectID, text, bulletPreset string, hasText, plainFirst
 	}
 
 	requests = append(requests,
-		google.Request{InsertText: &google.InsertTextRequest{ObjectID: objectID, Text: text, InsertionIndex: 0}},
+		google.Request{InsertText: &google.InsertTextRequest{
+			ObjectID: objectID, CellLocation: cell, Text: text, InsertionIndex: 0}},
 		google.Request{CreateParagraphBullets: &google.CreateParagraphBulletsRequest{
 			ObjectID:     objectID,
+			CellLocation: cell,
 			TextRange:    bulleted,
 			BulletPreset: bulletPreset,
 		}},
@@ -1177,17 +1336,20 @@ func nestedListRequests(objectID, text, bulletPreset string, hasText, plainFirst
 	// list gives the first line the list's indent, and on a box that is entirely a list
 	// that indent is correct.
 	if plainFirstLine {
-		requests = append(requests, google.Request{UpdateParagraphStyle: titleIndentRequest(objectID, titleEnd)})
+		requests = append(requests, google.Request{
+			UpdateParagraphStyle: titleIndentRequest(objectID, titleEnd, cell)})
 	}
 
 	return requests, nil
 }
 
 // titleIndentRequest puts the first line back where a title belongs.
-func titleIndentRequest(objectID string, titleEnd int64) *google.UpdateParagraphStyleRequest {
+func titleIndentRequest(objectID string, titleEnd int64,
+	cell *google.CellLocation) *google.UpdateParagraphStyleRequest {
 	return &google.UpdateParagraphStyleRequest{
-		ObjectID:  objectID,
-		TextRange: google.FixedRange(0, titleEnd),
+		ObjectID:     objectID,
+		CellLocation: cell,
+		TextRange:    google.FixedRange(0, titleEnd),
 		Style: &google.ParagraphStyle{
 			Alignment:       "START",
 			IndentStart:     google.PT(0),
@@ -1239,8 +1401,11 @@ func firstStyledRun(ctx context.Context, client *google.Client, presentationID, 
 	return "", google.TextStyle{}, fmt.Errorf("%s in %s has no text to read a style from", objectID, presentationID)
 }
 
-// findShape locates a text box by identifier, saying plainly when the object is there
-// but is not a shape — a caller that pointed at a table wants to know that.
+// findShape locates a text box by identifier, saying plainly when the object is there but is
+// not a shape.
+//
+// Pointing at a table is no longer a dead end, only an unfinished address: the text tools
+// reach a cell of one through row and column, and the refusal here says so.
 func findShape(presentation *google.Presentation, objectID string) (*google.Shape, error) {
 	for _, page := range presentation.Slides {
 		for _, element := range page.PageElements {
@@ -1248,6 +1413,11 @@ func findShape(presentation *google.Presentation, objectID string) (*google.Shap
 				continue
 			}
 			if element.Shape == nil {
+				if element.Table != nil {
+					return nil, fmt.Errorf("%s is a table: name row and column to work on one of "+
+						"its cells, or point at a text box", objectID)
+				}
+
 				return nil, fmt.Errorf("%s is a %s, not a text box", objectID, elementKind(element))
 			}
 			return element.Shape, nil

@@ -1160,7 +1160,12 @@ func (r *registry) sheetsUpdateProperties(ctx context.Context, req mcp.CallToolR
 	properties := google.SpreadsheetProperties{}
 	var fields []string
 
-	if title := optionalString(req, "title"); title != "" {
+	// A workbook cannot be left unnamed, so an empty title is a mistake — and a mistake
+	// said out loud, because dropped as empty it looked like a rename that worked.
+	if title, given := givenString(req, "title"); given {
+		if title == "" {
+			return toolError(fmt.Errorf("title is empty, and a workbook has to have a name")), nil
+		}
 		properties.Title = title
 		fields = append(fields, "title")
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mark3labs/mcp-go/server"
@@ -31,6 +32,10 @@ const (
 	// take only a URL, some take headers as well.
 	DiscoveryQuery  = "discovery"
 	DiscoveryHeader = "X-Gdocs-Discovery"
+
+	// SessionHeader is what the streamable transport puts on its answer to initialize and
+	// what a client repeats on every request afterwards, the listening stream included.
+	SessionHeader = "Mcp-Session-Id"
 )
 
 // WantsDiscovery says whether a request asked for the growing tool list.
@@ -117,21 +122,115 @@ func NewHandler(servers, discovery map[string]*server.MCPServer, token string, e
 	return mux
 }
 
-// switchOnDiscovery sends a request to whichever server the connection asked for.
+// switchOnDiscovery sends a request to whichever server the connection asked for, and keeps
+// sending it there for the rest of the session.
 //
-// The switch is read on every request rather than once per session because that is all this
-// layer can see; the session itself is kept by whichever transport answers, and a client that
-// sets the parameter in its configuration sets it on all of its requests. A client that sets
-// it on some and not others gets two sessions, which is what it asked for.
+// The switch is a decision of a new connection. Reading it on every request instead was a
+// silent trap, and this is what it cost: the tools an agent asked for arrived in its session
+// and it never learned they had. A tool added during a session is announced by
+// notifications/tools/list_changed, which goes down the listening stream a client opens with
+// GET — and a client is free to open that stream at the same path without the query
+// parameter. That stream then belonged to the full server, which has never heard of the
+// session; it opened normally, reported nothing wrong, and stayed silent for good.
+//
+// So the session, not the address, decides. The identifier the transport hands out on
+// initialize is remembered here together with the server that issued it, and every request
+// carrying it goes back to the same one. The switch still decides for a connection that has
+// no session yet.
 func switchOnDiscovery(full, narrow http.Handler) http.Handler {
+	sessions := &sessionRoutes{narrow: map[string]bool{}}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if WantsDiscovery(r) {
-			narrow.ServeHTTP(w, r)
-			return
+		if session := r.Header.Get(SessionHeader); session != "" {
+			if known, ok := sessions.lookup(session); ok {
+				serve(w, r, known, full, narrow, sessions)
+				return
+			}
 		}
 
-		full.ServeHTTP(w, r)
+		serve(w, r, WantsDiscovery(r), full, narrow, sessions)
 	})
+}
+
+// serve hands the request over and watches the answer for a session identifier, which is how
+// this layer learns that a session belongs to the narrow server.
+func serve(w http.ResponseWriter, r *http.Request, toNarrow bool, full, narrow http.Handler,
+	sessions *sessionRoutes) {
+	watched := &sessionWatcher{ResponseWriter: w, narrow: toNarrow, sessions: sessions}
+
+	if toNarrow {
+		narrow.ServeHTTP(watched, r)
+		return
+	}
+
+	full.ServeHTTP(watched, r)
+}
+
+// sessionRoutes remembers which server issued a session.
+//
+// It only ever grows, and that is deliberate: an entry is a session identifier and a
+// boolean, the transport below has no event for "this session ended" that reaches here, and
+// a wrong route is worse than a few hundred bytes. A process serving a person's editor sees
+// sessions in the dozens.
+type sessionRoutes struct {
+	mu     sync.RWMutex
+	narrow map[string]bool
+}
+
+func (s *sessionRoutes) lookup(session string) (bool, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	toNarrow, known := s.narrow[session]
+
+	return toNarrow, known
+}
+
+func (s *sessionRoutes) remember(session string, toNarrow bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.narrow[session] = toNarrow
+}
+
+// sessionWatcher notes the session identifier on its way out to the client.
+//
+// The header is set before the status is written, so both WriteHeader and a plain Write —
+// which writes the status itself — have to be covered. Flush is passed through because the
+// answer to a request may be a stream that stays open.
+type sessionWatcher struct {
+	http.ResponseWriter
+	narrow   bool
+	sessions *sessionRoutes
+	noted    bool
+}
+
+func (s *sessionWatcher) note() {
+	if s.noted {
+		return
+	}
+	s.noted = true
+
+	if session := s.Header().Get(SessionHeader); session != "" {
+		s.sessions.remember(session, s.narrow)
+	}
+}
+
+func (s *sessionWatcher) WriteHeader(status int) {
+	s.note()
+	s.ResponseWriter.WriteHeader(status)
+}
+
+func (s *sessionWatcher) Write(data []byte) (int, error) {
+	s.note()
+
+	return s.ResponseWriter.Write(data)
+}
+
+func (s *sessionWatcher) Flush() {
+	if flusher, ok := s.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
 }
 
 // RequireBearer rejects everything that does not carry the expected token.

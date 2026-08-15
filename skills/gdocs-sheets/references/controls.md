@@ -78,9 +78,9 @@ over a rectangle.
 | number format | `number_type`, `number_pattern` | `number_type`, `number_format` |
 | turned or stacked text | `rotation_angle`, `vertical_text` | `rotation_angle` (-90…90), `vertical_text` |
 | room inside the cell | `padding` | `padding` |
-| the cell's link | `link` | `link` |
+| the cell's link | `link` | `link` — an empty string takes it off |
 | how a link is drawn | `link_display` | `link_display` (LINKED / PLAIN_TEXT) |
-| the hover note | `note` | `note` |
+| the hover note | `note` | `note` — an empty string clears it |
 | borders | `borders` | `gdocs_sheets_set_borders` |
 | style that changes partway through the text | `runs` | `gdocs_sheets_set_text_runs` |
 
@@ -152,6 +152,9 @@ corners show and its field does not.
   default dark, which is worse than what it replaced. The alpha that the background refuses
   is accepted here, which is the whole trick and is the sort of thing only a render tells you.
 - `title: ""` takes the title off, for a chart whose name is written on the slide beside it.
+  On `add_chart` the same is true from the start: leave `title` out, or pass it empty, and the
+  chart is drawn without one. Do that for a chart going onto a slide — the slide already
+  carries a caption above it, and a chart with its own title puts two headings in a row.
 
 For a deck with light and dark variants that means one `background_color` per variant — the
 chart lives in the workbook and inherits nothing from the deck's palette.

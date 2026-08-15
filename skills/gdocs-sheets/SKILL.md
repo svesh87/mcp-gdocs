@@ -9,11 +9,16 @@ The job is "here is a workbook we keep; make another one like it, with this quar
 content". So the work is: **read the sample, decide in numbers, write, then compare field
 by field.**
 
-There is no tool that copies formatting from one workbook into another in one call, and
-that is deliberate. Copying answers "make it look like that" and hides the numbers — you
-never learn that the heading row is 68 pixels tall with a `#EFEFEF` fill, so you cannot
-decide to keep the height and change the colour. Everything a reading tool reports, a
-writing tool takes back in the same units.
+No tool answers "make it look like that", and that is deliberate: a look transferred behind
+your back hides the numbers — you never learn that the heading row is 68 pixels tall with a
+`#EFEFEF` fill, so you cannot decide to keep the height and change the colour. Everything a
+reading tool reports, a writing tool takes back in the same units.
+
+Carrying **content** across is a different question and has its own tools:
+`gdocs_sheets_copy_sheet` for a whole tab, `gdocs_sheets_copy_range` for a rectangle. Reach
+for them when the answer really is "put that there" — last quarter's tab into this year's
+workbook — and not when the job is the one above. `references/controls.md` says what each
+carries and, more usefully, what it does not.
 
 The failure this skill exists to prevent: a copy with every value in place that behaves
 nothing like the sample — free text where the sample has dropdowns, default row heights

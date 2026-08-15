@@ -311,9 +311,16 @@ matches every reported number still looks wrong. The routine:
   and on the master. Until one of those, the deck sits on Google's default theme however
   exact the content is. Building it is the only route that leaves every number named, and
   the only one that produces a deck of its own rather than a descendant of someone else's.
-- **An element from another presentation, or even another slide.** No request moves one.
-  A person can paste it in the browser; from there `gdocs_slides_duplicate` multiplies it
-  on its own slide, keeping what the API cannot name.
+- **A drawing, and a group in one step.** A drawing (`embeddedDrawing`) the API does not
+  describe at all, so nothing can rebuild it; a person pastes it in the browser, and from
+  there `gdocs_slides_duplicate` multiplies it on its own slide. A group is rebuilt child
+  by child and grouped afterwards with `gdocs_slides_group`.
+
+  Everything else *does* cross between decks now, by being read and built again:
+  `gdocs_slides_copy_slide` for a whole slide, `gdocs_slides_copy_element` for one thing on
+  it. Both answer with a `not_carried` list — read it, because they carry what they can and
+  name the rest rather than failing. And both carry content, never the theme: see the point
+  above, which the copy tools do not change.
 - **A slide's own background** does come across: read it and pass the `picture_url` to
   `set_page_background`. Importing a theme does not bring it — it is on the slide, not the
   master.

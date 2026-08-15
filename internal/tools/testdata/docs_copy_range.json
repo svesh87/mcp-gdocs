@@ -1,0 +1,104 @@
+{
+  "requests": [
+    {
+      "insertText": {
+        "location": {
+          "index": 1
+        },
+        "text": "Условия работы\n"
+      }
+    },
+    {
+      "updateTextStyle": {
+        "range": {
+          "startIndex": 1,
+          "endIndex": 16
+        },
+        "textStyle": {
+          "bold": true,
+          "fontSize": {
+            "magnitude": 18,
+            "unit": "PT"
+          }
+        },
+        "fields": "bold,fontSize"
+      }
+    },
+    {
+      "updateParagraphStyle": {
+        "range": {
+          "startIndex": 1,
+          "endIndex": 16
+        },
+        "paragraphStyle": {
+          "namedStyleType": "HEADING_1",
+          "alignment": "CENTER"
+        },
+        "fields": "namedStyleType,alignment"
+      }
+    },
+    {
+      "insertText": {
+        "location": {
+          "index": 16
+        },
+        "text": "Удалённо, гибкий график"
+      }
+    },
+    {
+      "updateTextStyle": {
+        "range": {
+          "startIndex": 16,
+          "endIndex": 39
+        },
+        "textStyle": {
+          "italic": true
+        },
+        "fields": "italic"
+      }
+    },
+    {
+      "insertInlineImage": {
+        "uri": "https://example.invalid/logo.png",
+        "location": {
+          "index": 39
+        },
+        "objectSize": {
+          "height": {
+            "magnitude": 40,
+            "unit": "PT"
+          },
+          "width": {
+            "magnitude": 120,
+            "unit": "PT"
+          }
+        }
+      }
+    },
+    {
+      "updateParagraphStyle": {
+        "range": {
+          "startIndex": 16,
+          "endIndex": 40
+        },
+        "paragraphStyle": {
+          "alignment": "START",
+          "indentStart": {
+            "magnitude": 36,
+            "unit": "PT"
+          }
+        },
+        "fields": "alignment,indentStart"
+      }
+    },
+    {
+      "createParagraphBullets": {
+        "range": {
+          "startIndex": 16,
+          "endIndex": 40
+        },
+        "bulletPreset": "BULLET_DISC_CIRCLE_SQUARE"
+      }
+    }
+  ]
+}

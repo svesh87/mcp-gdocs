@@ -21,7 +21,9 @@ func (r *registry) registerSheetsData(srv *server.MCPServer) {
 	srv.AddTool(mcp.NewTool("gdocs_sheets_add_chart",
 		mcp.WithDescription("Draw a chart from a range: column, bar, line, area, stepped area, scatter or "+
 			"pie. It floats over a tab at a cell you name, or lands on a tab of its own. The chart reads "+
-			"the cells rather than a copy of them, so it follows the numbers as they change."),
+			"the cells rather than a copy of them, so it follows the numbers as they change. The answer "+
+			"carries chart_id, which is what puts this chart on a slide with "+
+			"gdocs_slides_add_sheets_chart or gdocs_slides_replace_shapes_with_chart."),
 		mcp.WithString("spreadsheet_id", mcp.Required(), mcp.Description(spreadsheetIDHelp)),
 		mcp.WithString("sheet_title", mcp.Required(), mcp.Description("Tab the data is on.")),
 		mcp.WithString("type", mcp.DefaultString("COLUMN"), mcp.Description(
@@ -45,6 +47,22 @@ func (r *registry) registerSheetsData(srv *server.MCPServer) {
 			"STACKED to pile the series on each other, PERCENT_STACKED to make each column add to 100%.")),
 		mcp.WithString("axis_title", mcp.Description("Title under the bottom axis.")),
 		mcp.WithString("value_axis_title", mcp.Description("Title beside the left axis.")),
+		mcp.WithBoolean("data_labels", mcp.Description(
+			"Print each value on its own bar, column or point. A chart people read off a screen "+
+				"during a meeting needs these: nobody measures a bar against an axis by eye.")),
+		mcp.WithBoolean("total_data_labels", mcp.Description(
+			"Print the total over each stacked column. This is the one number a stacked chart "+
+				"otherwise does not show anywhere — the segments carry their own values, and on a "+
+				"column stacked from half a dozen categories those stop fitting inside the segments. "+
+				"Only for a stacked chart.")),
+		mcp.WithString("background_color", mcp.Description(
+			"What the chart is drawn on, as #RRGGBB. A chart put on a slide inside a panel arrives "+
+				"with a white rectangle of its own and paints over it: match the panel here.")),
+		mcp.WithBoolean("transparent_background", mcp.Description(
+			"Refused, and here to say why: Google does not accept an alpha on a chart's "+
+				"background at all. Match the panel with background_color instead.")),
+		mcp.WithNumber("font_size_pt", mcp.Description(
+			"Size of the chart's title text, in points.")),
 		mcp.WithNumber("pie_hole", mcp.Description(
 			"Hole in the middle of a pie, 0 to 1. Anything above 0 makes it a doughnut.")),
 		mcp.WithBoolean("own_tab", mcp.Description("Put the chart on a tab of its own instead of over this one.")),
@@ -234,6 +252,20 @@ func (r *registry) sheetsAddChart(ctx context.Context, req mcp.CallToolRequest) 
 		Title:    optionalString(req, "title"),
 		Subtitle: optionalString(req, "subtitle"),
 	}
+
+	// The same background as gdocs_sheets_update_chart writes, built through the same code:
+	// a chart drawn white over a coloured panel is the commonest way a deck comes out looking
+	// broken, and it should not depend on which tool made the chart.
+	painted := map[string]any{}
+	if err := patchChartBackground(painted, req); err != nil {
+		return toolError(err), nil
+	}
+	spec.BackgroundColor = painted["backgroundColor"]
+	spec.BackgroundColorStyle = painted["backgroundColorStyle"]
+
+	if size := req.GetFloat("font_size_pt", 0); size > 0 {
+		spec.TitleTextFormat = map[string]any{"fontSize": size}
+	}
 	legend := strings.ToUpper(req.GetString("legend", "RIGHT_LEGEND"))
 
 	if kind == "PIE" {
@@ -264,9 +296,21 @@ func (r *registry) sheetsAddChart(ctx context.Context, req mcp.CallToolRequest) 
 			}
 			basic.StackedType = stacked
 		}
+		// A number printed on the bar is what a demo audience actually reads: nobody
+		// measures a column against an axis by eye. On a column stacked from several
+		// categories the per-segment numbers stop fitting, and the total over the column
+		// is the one that has to be there — which is a separate field, not a placement.
+		var label *google.DataLabel
+		if req.GetBool("data_labels", false) {
+			label = &google.DataLabel{Type: "DATA"}
+		}
+		if req.GetBool("total_data_labels", false) {
+			basic.TotalDataLabel = &google.DataLabel{Type: "DATA"}
+		}
+
 		for _, index := range values {
 			basic.Series = append(basic.Series, google.BasicChartSeries{
-				Series: column(index), TargetAxis: "LEFT_AXIS"})
+				Series: column(index), TargetAxis: "LEFT_AXIS", DataLabel: label})
 		}
 		for _, axis := range []struct {
 			position, argument string
@@ -296,16 +340,28 @@ func (r *registry) sheetsAddChart(ctx context.Context, req mcp.CallToolRequest) 
 		position.OverlayPosition = overlay
 	}
 
-	if _, err := client.SheetsBatchUpdate(ctx, spreadsheetID, []google.SheetsRequest{{
+	response, err := client.SheetsBatchUpdate(ctx, spreadsheetID, []google.SheetsRequest{{
 		AddChart: &google.AddChartRequest{Chart: google.EmbeddedChart{Spec: spec, Position: position}},
-	}}); err != nil {
+	}})
+	if err != nil {
 		return toolError(err), nil
 	}
 
-	return resultJSON(map[string]any{
+	payload := map[string]any{
 		"spreadsheet_id": spreadsheetID, "sheet_title": sheetTitle, "sheet_id": sheetID,
 		"type": kind, "series": len(values), "own_tab": position.NewSheet,
-	})
+	}
+
+	// The identifier is handed back because it is the only handle the chart has: putting
+	// it on a slide with gdocs_slides_replace_shapes_with_chart, or changing it later with
+	// gdocs_sheets_update_chart, both address it by this number and by nothing else.
+	for _, reply := range response.Replies {
+		if reply.AddChart != nil && reply.AddChart.Chart.ChartID != 0 {
+			payload["chart_id"] = reply.AddChart.Chart.ChartID
+		}
+	}
+
+	return resultJSON(payload)
 }
 
 // tableColumnTypes are what a table's column may hold. The chip kinds that point at people,

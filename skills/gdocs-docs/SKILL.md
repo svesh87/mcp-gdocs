@@ -8,11 +8,16 @@ description: Build or edit a Google Doc, or rebuild one from a sample, with the 
 The job is "here is the offer we send; make one like it for this person". So the work is:
 **read the sample, decide in numbers, write in the order that holds, then compare.**
 
-There is no tool that copies a document into another, and that is deliberate. Copying
-answers "make it look like that" and hides the numbers — you never learn that the heading
-row is 116 pt tall or that the body font is Roboto 12, so you cannot decide to keep one
-and change the other. Everything a reading reports, a writing tool takes back in the same
-units, with the same key names.
+No tool answers "make it look like that", and that is deliberate: a look transferred behind
+your back hides the numbers — you never learn that the heading row is 116 pt tall or that
+the body font is Roboto 12, so you cannot decide to keep one and change the other.
+Everything a reading reports, a writing tool takes back in the same units, with the same
+key names.
+
+`gdocs_docs_copy_range` does carry a stretch of another document here, and it is for the
+other kind of job: "take these three paragraphs from the last offer", not "make this offer
+like that one". It rebuilds rather than copies — the API has no copying request at all —
+and says in its answer what it could not carry.
 
 The failure this skill exists to prevent: a document with all the right words that behaves
 nothing like the sample — an empty paragraph wedged in front of every table, list items
@@ -101,6 +106,18 @@ It stops at the document's edge — no files, no folders, ever. Two things to kn
 using it: the paragraph directly in front of a table or a section break cannot be removed
 on its own (wipe the whole range instead, which takes the table and the break with it),
 and there is no undo. Take the indexes from a reading made after the last edit.
+
+## Taking a piece of another document
+
+`gdocs_docs_copy_range` reads a stretch of another document and writes it here: paragraphs,
+runs with their styling, lists, inline pictures. The API has no copying request at all, so
+this is a rebuild, and a rebuild carries what both ends express the same way. Tables,
+section breaks and chips are named in `not_carried` rather than half-built — read that list,
+it is the difference between a copy and a copy with two holes in it.
+
+Take the indices from `read_structure` and use the tool in the same pass: a picture's
+address is signed and expires in about half an hour. `references/controls.md` has the whole
+table of what crosses and what does not.
 
 ## Never
 

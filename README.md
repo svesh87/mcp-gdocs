@@ -16,13 +16,13 @@ deck's own slides, real tables, and a thumbnail to check the result with.
 
 Each of these is a decision, not an implementation detail:
 
-- **Native lists, not hand-drawn ones.** `gdocs_slides_replace_body_nested_list` sends
-  the text with tab characters for depth and asks Slides to make a list of it. Google
-  then works out the indents, the markers and the spacing from the template. A server
-  that positions bullets itself gets them almost right, which is worse than wrong.
-- **Styles are copied, never invented.** `gdocs_slides_copy_title_style` reads the first
-  run of a real title and applies those fields. Nothing guesses what "the heading font"
-  is.
+- **Native lists, not hand-drawn ones.** `gdocs_slides_set_list` sends the text with tab
+  characters for depth and asks Slides to make a list of it. Google then works out the
+  indents, the markers and the spacing from the template. A server that positions bullets
+  itself gets them almost right, which is worse than wrong.
+- **Styles are read, never invented.** `gdocs_slides_inspect_title_style` reports what a
+  real title on a real slide is set to, field by field, and `gdocs_slides_set_text_style`
+  writes those fields. Nothing guesses what "the heading font" is.
 - **Look before changing.** `gdocs_slides_inspect_text_structure` shows what is in a text
   box — paragraphs, bullets, nesting — before anything is replaced.
 - **A table is a table.** `gdocs_slides_create_table_with_text` creates a real Slides
@@ -56,22 +56,28 @@ offers only the reading tools.
 
 ## Choosing the set of tools
 
-A hundred and thirty-eight tool descriptions in an agent's context is a hundred and thirty
-it will never call. `--tools` picks what a server offers, by family and by what the tools
-do:
+A hundred and forty-three tool descriptions in an agent's context is a hundred and forty it
+will never call. `--tools` picks what a server offers, by family and by what the tools do:
 
 ```
 --tools=slides-read,docs-read     # exactly those two groups
---tools=docs                      # the family: reading and writing, no removal
+--tools=docs                      # the family: reading and writing, nothing else
 --tools=all,sheets-delete         # everything ordinary, plus one kind of removal
+--tools=slides,slides-copy        # slides, and bringing content in from other decks
 GDOCS_TOOLS=drive-read            # the same through the environment, for compose
 ```
 
-The groups are `slides-`, `sheets-`, `docs-` and `drive-`, each with `read`, `write` and
-`delete`, plus `drive-share`. Naming a family means its reading and writing halves; `all`
-means everything except removal and sharing. An unknown name is refused at startup with
-the list of the known ones. Left out altogether, the set is what it has always been:
-everything except removal and sharing.
+The groups are `slides-`, `sheets-` and `docs-`, each with `read`, `write`, `copy` and
+`delete`; `drive-` has all but `copy`, plus `drive-share`. `copy` is the tools that carry
+content in from another document, which is the kind of thing a project may want to switch
+off on its own — "work here, but do not drag things in from elsewhere". Copying a *file* is
+not in it: `gdocs_drive_copy` and `gdocs_slides_copy_presentation` are ordinary Drive
+writing, and they are how a deck starts from a template.
+
+Naming a family means its reading and writing halves and nothing more; `all` means
+everything except removal and sharing, copying included. An unknown name is refused at
+startup with the list of the known ones. Left out altogether, the set is everything except
+removal and sharing.
 
 Over HTTP the same process also serves one path per family, so a project can connect to
 just the one it needs:
@@ -86,18 +92,27 @@ window cannot show what `--tools` did not allow.
 
 ## Tools
 
-A hundred and thirty-eight of them, covering every request the three APIs have except the
+A hundred and forty-three of them, covering every request the three APIs have except the
 five that reach BigQuery. A server started without `--allow-write` registers the reading
 ones and nothing else, and the four that touch the disk — `gdocs_drive_export_file`,
 `gdocs_drive_download_file`, `gdocs_drive_import_file` and `gdocs_slides_export_images` —
 appear only when `--files-dir` names a directory they may use.
 
 They come in pairs on purpose: whatever a reading tool reports, a writing tool takes back
-in the same units. There is no tool that copies styling from one deck into another in one
-call — that answers "make this look like that", and the job is to build a deck that looks
-right, having read how a dozen others are built. Copying also hides the numbers: a caller
-that never learns the sample's headings are 25 pt in the theme's accent colour cannot
-decide to use 22 pt here, or to keep the size and change the colour.
+in the same units. No tool answers "make this look like that" — the job is to build a deck
+that looks right, having read how a dozen others are built, and a style transferred behind
+the caller's back hides the numbers it was made of: a caller that never learns the sample's
+headings are 25 pt in the theme's accent colour cannot decide to use 22 pt here, or to keep
+the size and change the colour.
+
+Carrying content between documents is a different question and has its own tools, in groups
+of their own — `slides-copy`, `sheets-copy`, `docs-copy`. "Bring that slide here", "put this
+tab in that workbook", "take these paragraphs from the last offer" are ordinary work, and
+the answer to each is exact rather than approximate. Google gives one request for it in
+total, `sheets.copyTo`; everywhere else these tools read the source and build it again, and
+say in the answer what they could not carry rather than leaving it to be discovered. What
+never crosses is a deck's theme: no request in the Slides API applies one, so a deck that
+must look like a sample is started as a copy of it.
 
 Reading, always offered:
 
@@ -138,7 +153,9 @@ Slides, the content of a deck:
 | `gdocs_slides_add_slide` | add a slide following one of the deck's own layouts |
 | `gdocs_slides_set_text` | replace a text box's text, styling left to the template |
 | `gdocs_slides_replace_text` | swap a stretch of text everywhere it appears, keeping the styling around it |
-| `gdocs_slides_replace_body_nested_list` | rebuild a body slide as a native nested list |
+| `gdocs_slides_set_list` | turn a text box into a native nested list, depth by tab characters |
+| `gdocs_slides_copy_slide` | build a slide from another deck again here: content, not theme |
+| `gdocs_slides_copy_element` | the same for one element |
 | `gdocs_slides_create_table_with_text` | a real table with widths, fonts, colours and alignment |
 | `gdocs_slides_update_table_cells` | new values in a table that already exists, keeping its widths and styling |
 | `gdocs_slides_style_table` | merge cells, fill them, align their content, set row heights |
@@ -161,7 +178,6 @@ Slides, how it looks:
 | `gdocs_slides_style_image` | crop, transparency, brightness, contrast and border of a picture |
 | `gdocs_slides_set_text_style` | size, font, weight, italics, colour — literal or by theme name |
 | `gdocs_slides_set_paragraph_style` | alignment, line spacing, the space around paragraphs, indents |
-| `gdocs_slides_copy_title_style` | copy a real title's style onto another, across decks if needed |
 | `gdocs_slides_reset_text_style` | give text back to its layout |
 | `gdocs_slides_link_text` | turn a piece of text into a link |
 | `gdocs_slides_style_layout` | write a style into a layout or the master, so every slide following it inherits |
@@ -235,7 +251,10 @@ Sheets, Docs and Drive:
 | `gdocs_sheets_paste_text` | paste delimited text or an HTML table, split on Google's side |
 | `gdocs_sheets_shape_range` | insert cells and push the rest aside, or shuffle rows |
 | `gdocs_sheets_append_rows` | add rows after the last one with anything in it |
-| `gdocs_sheets_update_chart` | move a chart, frame it, or change its titles |
+| `gdocs_sheets_update_chart` | move a chart, frame it, change its titles and labels, or point it at a different range — keeping its number, and so every slide that shows it |
+| `gdocs_sheets_copy_sheet` | copy a tab into another workbook, with everything Google copies and this server cannot write |
+| `gdocs_sheets_copy_range` | copy a rectangle into another workbook: what was typed, with its format, notes and dropdowns |
+| `gdocs_docs_copy_range` | build a stretch of another document again here: paragraphs, runs, lists, pictures |
 | `gdocs_sheets_filter_view` | a saved way of looking at a range, without changing anybody else's view |
 | `gdocs_sheets_slicer` | the control a reader clicks to filter by one column |
 | `gdocs_sheets_set_metadata` | a label that travels with the row it is attached to |

@@ -1,0 +1,105 @@
+{
+  "requests": [
+    {
+      "createShape": {
+        "objectId": "shape_test",
+        "shapeType": "TEXT_BOX",
+        "elementProperties": {
+          "pageObjectId": "slideA",
+          "size": {
+            "width": {
+              "magnitude": 3000000,
+              "unit": "EMU"
+            },
+            "height": {
+              "magnitude": 3000000,
+              "unit": "EMU"
+            }
+          },
+          "transform": {
+            "scaleX": 2.8,
+            "scaleY": 0.16,
+            "translateX": 1000000,
+            "translateY": 2000000,
+            "unit": "EMU"
+          }
+        }
+      }
+    },
+    {
+      "updateShapeProperties": {
+        "objectId": "shape_test",
+        "shapeProperties": {
+          "shapeBackgroundFill": {
+            "propertyState": "RENDERED",
+            "solidFill": {
+              "color": {
+                "rgbColor": {
+                  "red": 0.95,
+                  "green": 0.96,
+                  "blue": 0.98
+                }
+              },
+              "alpha": 1
+            }
+          },
+          "contentAlignment": "MIDDLE"
+        },
+        "fields": "shapeBackgroundFill,contentAlignment"
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "shape_test",
+        "text": "Итоги августа",
+        "insertionIndex": 0
+      }
+    },
+    {
+      "updateTextStyle": {
+        "objectId": "shape_test",
+        "textRange": {
+          "type": "FIXED_RANGE",
+          "startIndex": 0,
+          "endIndex": 6
+        },
+        "style": {
+          "bold": true,
+          "fontSize": {
+            "magnitude": 24,
+            "unit": "PT"
+          }
+        },
+        "fields": "bold,fontSize"
+      }
+    },
+    {
+      "updateTextStyle": {
+        "objectId": "shape_test",
+        "textRange": {
+          "type": "FIXED_RANGE",
+          "startIndex": 6,
+          "endIndex": 13
+        },
+        "style": {
+          "italic": true
+        },
+        "fields": "italic"
+      }
+    },
+    {
+      "updateParagraphStyle": {
+        "objectId": "shape_test",
+        "textRange": {
+          "type": "FIXED_RANGE",
+          "startIndex": 0,
+          "endIndex": 13
+        },
+        "style": {
+          "alignment": "START"
+        },
+        "fields": "alignment"
+      }
+    }
+  ]
+}

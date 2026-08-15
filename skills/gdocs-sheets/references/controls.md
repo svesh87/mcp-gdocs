@@ -138,9 +138,44 @@ names the series or is drawn as data.
 
 The chart reads the cells rather than a copy of them, so it follows the numbers.
 
+**Paint it to match where it will stand.** A chart put on a slide inside a panel arrives with
+a white rectangle of its own and paints over the panel — its corners show and its field does
+not. `background_color` takes `#RRGGBB`; read the panel's fill with
+`gdocs_slides_inspect_page` and pass that. There is no transparent option: Google refuses an
+alpha on a chart background outright ("chart.backgroundColorStyle.alpha not supported"), and
+`transparent_background` exists only to say so. For a deck with light and dark variants that
+means one `background_color` per variant — the chart lives in the workbook and inherits
+nothing from the deck's palette.
+
+**Print the numbers on it.** `data_labels` puts each value on its own bar or point;
+`total_data_labels` puts the sum over each stacked column. They are different fields, not
+two placements of one: on a column stacked from half a dozen categories the per-segment
+numbers stop fitting, and the total is shown nowhere else at all. A chart people read off a
+screen during a meeting needs at least one of them — nobody measures a bar against an axis
+by eye.
+
+**The chart's number is how everything else addresses it.** `gdocs_sheets_info` reports the
+charts of every tab with `chart_id`, the title and the anchor cell; `gdocs_sheets_add_chart`
+hands back the `chart_id` of what it just drew. That number is what
+`gdocs_slides_add_sheets_chart` and `gdocs_slides_replace_shapes_with_chart` take, and what
+`update_chart` and `delete` take.
+
 `gdocs_sheets_update_chart` changes one that exists: where it sits, how big it is, its
-frame, its titles. Changing beats recreating — a chart made again loses its place on the
-tab and every reference to it from a slide.
+frame, its titles, its labels — and **what it draws**, with `data_sheet_title`,
+`labels_column`, `value_columns`, `start_row` and `end_row`. Changing beats recreating, and
+not by a little: a chart made again gets a **new number**, so every slide showing the old
+one is left pointing at nothing. Adding a series or extending the window is a change, not a
+rebuild.
+
+The tool reads the chart's whole specification, alters what was named and writes it back,
+because `updateChartSpec` has no field mask — whatever is sent becomes the chart. That is
+also why the series keep their colours when the range grows.
+
+**A chart on a slide shows the drawing made when it was put there.** Editing the workbook
+changes nothing on the slide until `gdocs_slides_refresh_sheets_chart` is called for that
+element, and by looking at the slide you cannot tell this month's numbers from last
+year's. Refresh every chart before handing a deck over — and then look at the renders,
+because the refresh brings across everything that changed, not only what you expected.
 
 ## Tables
 
@@ -163,6 +198,38 @@ what they are told to.
 | insert cells and push the rest aside | `gdocs_sheets_shape_range` (`insert_cells`) | not the same as inserting rows: only the rectangle's own columns move |
 | shuffle rows | `gdocs_sheets_shape_range` (`randomize`) | |
 | add rows after the last filled one | `gdocs_sheets_append_rows` | a string beginning with `=` goes in as a formula |
+
+## Bringing content in from another workbook
+
+Two ways, different in kind, and the difference decides which to reach for. They are in the
+`sheets-copy` group, which the default set offers and `--tools=sheets` does not.
+
+| What | Tool | What arrives |
+|---|---|---|
+| a whole tab into another workbook | `gdocs_sheets_copy_sheet` | everything, including what nothing here can write: charts, rules that paint by content, banding, protections, filters |
+| a rectangle into another workbook | `gdocs_sheets_copy_range` | what was **typed** — formulas, not today's numbers — with the format, the note, the dropdown, the runs inside a cell, and the merges inside the rectangle |
+
+`copy_sheet` is the one request in any of Google's document APIs that carries content
+between documents; Google performs it, so it brings across the parts this server has no way
+to write. The copy arrives called `Copy of <title>` unless `new_title` says otherwise, and
+the rename is a second request — if it fails the tab is still there under Google's name.
+
+Two things to look at afterwards. **Formulas that pointed at other tabs of the source**
+come across pointing at tabs of the same name in the destination, and break if there are
+none. And `copy_range` names in `not_carried` every rule that touched the rectangle and did
+not travel — conditional formatting, banding, a protected range — because a rectangle whose
+colours came from a rule arrives grey and says nothing about it.
+
+```
+gdocs_sheets_copy_range
+  source_spreadsheet_id: 1b73…  source_sheet_title: Цели
+  start_row: 4  end_row: 20  start_column: 2  end_column: 8
+  target_spreadsheet_id: 1ZqS…  target_sheet_title: Цели  target_row: 0  target_column: 0
+→ {"rows": 16, "merges": 2, "not_carried": ["conditional formatting"], "note": "…"}
+```
+
+Inside one workbook this is not the tool: `gdocs_sheets_move_range` above does it in one
+request, and `gdocs_sheets_duplicate_tab` copies a tab.
 
 ## Views, slicers and labels
 
@@ -202,6 +269,8 @@ and `table` — and the answer says so.
 - **Delete a file outright.** A workbook goes as far as the bin and no further; nothing
   here empties it.
 - **Take arbitrary API requests.** Every tool builds its own.
-- **Copy anything from one workbook into another.** The API can copy a tab across, and this
-  server does not: what it writes has to be something a caller decided and could name.
+- **Carry a rule that paints by content into another workbook.** `copy_sheet` brings a
+  whole tab with its rules because Google performs that copy itself; `copy_range` cannot,
+  and names in `not_carried` every rule it left behind. Rebuild those with
+  `set_conditional_format`, `set_banding` and `protect_range`.
 - **Reach a data source.** The five BigQuery requests are deliberately absent.

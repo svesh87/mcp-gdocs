@@ -1,0 +1,64 @@
+{
+  "requests": [
+    {
+      "updateCells": {
+        "start": {
+          "sheetId": 0,
+          "rowIndex": 5,
+          "columnIndex": 0
+        },
+        "rows": [
+          {
+            "values": [
+              {
+                "userEnteredFormat": {
+                  "backgroundColor": {
+                    "red": 1,
+                    "green": 1,
+                    "blue": 1
+                  },
+                  "textFormat": {
+                    "bold": true
+                  }
+                },
+                "note": "заполняет дежурный",
+                "dataValidation": {
+                  "condition": {
+                    "type": "ONE_OF_LIST",
+                    "values": [
+                      {
+                        "userEnteredValue": "Всё ок"
+                      }
+                    ]
+                  },
+                  "strict": true
+                },
+                "userEnteredValue": {
+                  "stringValue": "Статус"
+                }
+              },
+              {
+                "userEnteredValue": {
+                  "formulaValue": "=SUM(D2:D9)"
+                }
+              }
+            ]
+          }
+        ],
+        "fields": "userEnteredValue,userEnteredFormat,note,dataValidation,textFormatRuns"
+      }
+    },
+    {
+      "mergeCells": {
+        "range": {
+          "sheetId": 0,
+          "startRowIndex": 5,
+          "endRowIndex": 6,
+          "startColumnIndex": 0,
+          "endColumnIndex": 2
+        },
+        "mergeType": "MERGE_ALL"
+      }
+    }
+  ]
+}

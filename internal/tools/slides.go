@@ -75,13 +75,15 @@ const structureMask = "slides(pageElements(objectId,shape(text(textElements(star
 const pagesMask = "presentationId,title,pageSize,layouts(objectId,layoutProperties(name,displayName))," +
 	"slides(objectId,slideProperties(layoutObjectId,isSkipped),layoutProperties(name,displayName)," +
 	"pageElements(objectId,title,size,transform,shape(shapeType,placeholder,text(textElements(textRun(content))))," +
-	"table(rows,columns,tableColumns(columnWidth),tableRows(rowHeight)),image(contentUrl),video(url),line(lineType)))"
+	"table(rows,columns,tableColumns(columnWidth),tableRows(rowHeight)),image(contentUrl),video(url),line(lineType)," +
+	"sheetsChart(spreadsheetId,chartId,contentUrl)))"
 
 // layoutsMask lists the layouts a new slide can follow.
 const layoutsMask = "layouts(objectId,layoutProperties(name,displayName))"
 
 func (r *registry) registerSlides(srv *server.MCPServer) {
 	r.registerSlidesLayout(srv)
+	r.registerSlidesCopy(srv)
 	r.registerSlidesLinks(srv)
 	r.registerSlidesPage(srv)
 	r.registerSlidesShape(srv)
@@ -629,6 +631,11 @@ func (r *registry) slidesList(ctx context.Context, req mcp.CallToolRequest) (*mc
 		ContentURL string `json:"content_url,omitempty"`
 		Rows       int    `json:"rows,omitempty"`
 		Columns    int    `json:"columns,omitempty"`
+		// A chart standing on a slide names the workbook and the chart it came from. Those
+		// two are what refreshing it takes, and what tells a reader whether the picture on
+		// the slide still follows the numbers or is a snapshot of them.
+		SpreadsheetID string `json:"spreadsheet_id,omitempty"`
+		ChartID       int    `json:"chart_id,omitempty"`
 		// Geometry is always reported, zeroes included: an element at x=0 is an element
 		// at the left edge, and a field that disappears when it is zero is a field a
 		// caller cannot place anything against.
@@ -703,6 +710,11 @@ func (r *registry) slidesList(ctx context.Context, req mcp.CallToolRequest) (*mc
 			}
 			if item.Image != nil {
 				described.ContentURL = item.Image.ContentURL
+			}
+			if chart := item.SheetsChart; chart != nil {
+				described.SpreadsheetID = chart.SpreadsheetID
+				described.ChartID = chart.ChartID
+				described.ContentURL = chart.ContentURL
 			}
 			if item.Transform != nil {
 				described.X = item.Transform.TranslateX
@@ -1297,6 +1309,8 @@ func elementKind(element google.PageElement) string {
 		return "video"
 	case element.Line != nil:
 		return "line"
+	case element.SheetsChart != nil:
+		return "sheets_chart"
 	default:
 		return "element"
 	}

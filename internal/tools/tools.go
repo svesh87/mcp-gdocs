@@ -6,9 +6,17 @@
 // leaves a deck looking broken. Each tool below builds its own requests, in the order
 // that keeps a template's own styling in charge.
 //
-// There are no deletion tools either — not disabled, not gated behind a flag, absent.
-// An agent that tidied up somebody's shared drive is an incident, and the cheapest way
-// to not have that incident is to have no code that could cause it.
+// Removal stops at the bin. Inside a presentation, a document or a workbook, removing
+// something is ordinary editing, so those tools exist — each in a group of its own, none
+// of them in the default set. A file goes as far as the bin, which its owner can undo.
+// Emptying that bin, deleting a file outright and removing a folder have no code here at
+// all: an agent that tidied up somebody's shared drive is an incident, and the cheapest
+// way to not have that incident is to have nothing that could cause it.
+//
+// Carrying content in from another document is its own class of tool, in its own groups.
+// Google gives exactly one request for it — copying a sheet into another workbook — so
+// everything else here reads the source and rebuilds it in the target, in one pass,
+// naming in the answer whatever it could not carry.
 package tools
 
 import (

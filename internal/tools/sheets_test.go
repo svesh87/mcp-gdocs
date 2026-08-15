@@ -31,6 +31,66 @@ func TestSheetsInfo(t *testing.T) {
 	}
 }
 
+// spreadsheetWithCharts is a tab carrying three charts, which is what a workbook built to
+// feed a deck looks like.
+const spreadsheetWithCharts = `{
+  "spreadsheetId": "book",
+  "properties": {"title": "Данные графиков"},
+  "sheets": [
+    {"properties": {"sheetId": 0, "title": "Категории", "index": 0},
+     "charts": [
+       {"chartId": 1147694029, "spec": {"title": "Закрытые задачи по категориям"},
+        "position": {"overlayPosition": {"anchorCell": {"sheetId": 0, "rowIndex": 12, "columnIndex": 1}}}},
+       {"chartId": 883012, "spec": {"title": "Попугаи по категориям"},
+        "position": {"newSheet": true}}
+     ]}
+  ]
+}`
+
+// TestSheetsInfoNamesTheCharts: a chart is addressed by a number, and until this was
+// reported there was nowhere to learn it. A count said a chart existed and left it
+// unusable — gdocs_slides_replace_shapes_with_chart takes the number and nothing else.
+func TestSheetsInfoNamesTheCharts(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).answer("/spreadsheets/book", spreadsheetWithCharts))
+
+	answer := h.ok(h.registry.sheetsInfo(context.Background(), request(map[string]any{
+		"spreadsheet_id": "book",
+	})))
+
+	for _, want := range []string{
+		`"chart_id": 1147694029`,
+		"Закрытые задачи по категориям",
+		`"anchor_row": 12`,
+		`"chart_id": 883012`,
+		`"own_tab": true`,
+	} {
+		if !strings.Contains(answer, want) {
+			t.Errorf("the description should carry %s, got %s", want, answer)
+		}
+	}
+}
+
+// TestSheetsAddChartHandsBackTheIdentifier: the number Google assigns is the only handle
+// the chart will ever have, and dropping the reply meant a chart could be made and then
+// never pointed at.
+func TestSheetsAddChartHandsBackTheIdentifier(t *testing.T) {
+	fake := newFakeGoogle(t).
+		answer(":batchUpdate", `{"replies": [{"addChart": {"chart": {"chartId": 42}}}]}`).
+		answer("/spreadsheets/book", spreadsheetInfo)
+	h := newHarness(t, fake)
+
+	answer := h.ok(h.registry.sheetsAddChart(context.Background(), request(map[string]any{
+		"spreadsheet_id": "book", "sheet_title": "Сотрудники", "type": "COLUMN",
+		"title": "Закрытые задачи", "labels_column": float64(0),
+		"value_columns": []any{float64(1)},
+		"start_row":     float64(0), "end_row": float64(6),
+	})))
+
+	if !strings.Contains(answer, `"chart_id": 42`) {
+		t.Errorf("the answer should carry the new chart's number, got %s", answer)
+	}
+}
+
 func TestSheetsReadWholeTab(t *testing.T) {
 	fake := newFakeGoogle(t).answer("/values/",
 		`{"range": "'Сотрудники'!A1:C2", "majorDimension": "ROWS", "values": [["Имя", "Отдел"], ["Аня", "SRE"]]}`)

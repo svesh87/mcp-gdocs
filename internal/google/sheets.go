@@ -3,8 +3,10 @@ package google
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -39,10 +41,14 @@ type Sheet struct {
 	BasicFilter        *BasicFilter        `json:"basicFilter,omitempty"`
 	RowGroups          []DimensionGroup    `json:"rowGroups,omitempty"`
 	ColumnGroups       []DimensionGroup    `json:"columnGroups,omitempty"`
-	// The rest are kept raw and only counted: reproducing a chart or a data source needs
-	// a surface of its own, and a tab that has one is a tab a copy will quietly differ
-	// from. A count is what lets that be named in a report instead of discovered later.
-	Charts  []json.RawMessage `json:"charts,omitempty"`
+	// Charts are read down to their identifiers, because two writing tools address a chart
+	// by its number — gdocs_sheets_update_chart and gdocs_slides_replace_shapes_with_chart
+	// — and there is nowhere else to learn it. Counting them said a chart existed and left
+	// it unusable.
+	Charts []EmbeddedChartInfo `json:"charts,omitempty"`
+	// Slicers and tables are still kept raw and only counted: reproducing one needs a
+	// surface of its own, and a tab that has one is a tab a copy will quietly differ from.
+	// A count is what lets that be named in a report instead of discovered later.
 	Slicers []json.RawMessage `json:"slicers,omitempty"`
 	Tables  []json.RawMessage `json:"tables,omitempty"`
 	// DeveloperMetadata is the labels attached to this tab, or to rows and columns of it.
@@ -327,6 +333,60 @@ func (c *Client) SpreadsheetGrid(ctx context.Context, spreadsheetID, a1Range str
 	return &out, nil
 }
 
+// SpreadsheetCopyGrid reads a rectangle the way a copy needs it: what was typed rather
+// than what is shown.
+//
+// SpreadsheetGrid asks for formattedValue, which is right for looking at a sample and
+// wrong for carrying it somewhere else — a formula arrives as the number it happens to
+// produce today, and the copy stops following its inputs. This mask asks for
+// userEnteredValue instead, and for the three things that sit beside the format rather
+// than inside it: the note, the validation and the runs.
+func (c *Client) SpreadsheetCopyGrid(ctx context.Context, spreadsheetID, a1Range string) (*Spreadsheet, error) {
+	query := url.Values{}
+	query.Set("includeGridData", "true")
+	if a1Range != "" {
+		query.Set("ranges", a1Range)
+	}
+	// The rules are asked for alongside the cells, not to reproduce them — nothing here
+	// writes a conditional format into another workbook — but so that a copy can say what
+	// it left behind. A rectangle whose colours come from a rule arrives grey and silent
+	// otherwise.
+	query.Set("fields", "spreadsheetId,properties(title),"+
+		"sheets(properties(sheetId,title,index,gridProperties),merges,conditionalFormats,"+
+		"bandedRanges,protectedRanges,"+
+		"data(startRow,startColumn,rowData(values(userEnteredValue,userEnteredFormat,note,"+
+		"dataValidation,textFormatRuns))))")
+
+	var out Spreadsheet
+	if err := c.call(ctx, http.MethodGet,
+		endpoint(c.sheetsBase, "/spreadsheets/"+url.PathEscape(spreadsheetID), query), nil, &out); err != nil {
+		return nil, err
+	}
+
+	return &out, nil
+}
+
+// CopySheetTo copies one tab into another workbook.
+//
+// This is the only request in any of the three APIs that carries content from one document
+// into another, which is why it is worth being exact about what arrives: the tab whole —
+// values, formats, merges, rules, protections, charts — under a name Google picks, of the
+// form "Copy of <title>". Renaming it afterwards is the caller's business.
+//
+// Formulas that pointed at other tabs of the source workbook come across pointing at the
+// destination's tabs of the same name, or break if there are none. That is Google's
+// behaviour, not this server's, and it is the reason a copied tab is worth looking at.
+func (c *Client) CopySheetTo(ctx context.Context, spreadsheetID string, sheetID int, destinationSpreadsheetID string) (*SheetProperties, error) {
+	var out SheetProperties
+	if err := c.call(ctx, http.MethodPost, endpoint(c.sheetsBase,
+		"/spreadsheets/"+url.PathEscape(spreadsheetID)+"/sheets/"+strconv.Itoa(sheetID)+":copyTo", nil),
+		map[string]string{"destinationSpreadsheetId": destinationSpreadsheetID}, &out); err != nil {
+		return nil, err
+	}
+
+	return &out, nil
+}
+
 // Values reads one range in A1 notation. An empty range name reads a whole tab.
 func (c *Client) Values(ctx context.Context, spreadsheetID, a1Range, majorDimension, renderOption string) (*ValueRange, error) {
 	query := url.Values{}
@@ -590,9 +650,51 @@ type RandomizeRangeRequest struct {
 
 // UpdateChartSpecRequest changes a chart without making a new one, so it keeps its place
 // and its size.
+// UpdateChartSpecRequest replaces a chart's whole specification.
+//
+// Wholesale is not a manner of speaking: there is no field mask here, so whatever is sent
+// becomes the chart. That is why Spec is untyped — the only safe way to change one field is
+// to read the chart's current specification as it came from Google, change that, and send
+// it back, and a typed struct would silently drop everything it does not model on the way
+// through.
 type UpdateChartSpecRequest struct {
-	ChartID int        `json:"chartId"`
-	Spec    *ChartSpec `json:"spec"`
+	ChartID int `json:"chartId"`
+	Spec    any `json:"spec"`
+}
+
+// ChartSpecOf reads one chart's whole specification, exactly as Google stores it.
+//
+// It comes back as a map rather than a struct on purpose: it is about to be sent straight
+// back with one field changed, and anything this server does not model — a background
+// colour, a hidden-dimension strategy, a per-series line style — has to survive the round
+// trip. Decoding into a struct is how a chart loses half of itself to a change of title.
+func (c *Client) ChartSpecOf(ctx context.Context, spreadsheetID string, chartID int) (map[string]any, error) {
+	query := url.Values{}
+	query.Set("fields", "sheets(charts)")
+
+	var out struct {
+		Sheets []struct {
+			Charts []struct {
+				ChartID int            `json:"chartId"`
+				Spec    map[string]any `json:"spec"`
+			} `json:"charts"`
+		} `json:"sheets"`
+	}
+	if err := c.call(ctx, http.MethodGet,
+		endpoint(c.sheetsBase, "/spreadsheets/"+url.PathEscape(spreadsheetID), query), nil, &out); err != nil {
+		return nil, err
+	}
+
+	for _, sheet := range out.Sheets {
+		for _, chart := range sheet.Charts {
+			if chart.ChartID == chartID {
+				return chart.Spec, nil
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("no chart %d in this spreadsheet: gdocs_sheets_info lists the charts of "+
+		"every tab with their numbers", chartID)
 }
 
 // UpdateEmbeddedPosReq moves a chart or a slicer.
@@ -799,6 +901,17 @@ type EmbeddedChart struct {
 	Position EmbeddedObjectPosition `json:"position"`
 }
 
+// EmbeddedChartInfo is a chart already on a tab, as a reading reports it.
+//
+// It is deliberately not EmbeddedChart: what a reader needs is the number the writing
+// requests address the chart by and enough of a name to tell one chart from another, not
+// the whole specification, which is large and which this server does not reproduce.
+type EmbeddedChartInfo struct {
+	ChartID  int                     `json:"chartId,omitempty"`
+	Spec     *ChartSpec              `json:"spec,omitempty"`
+	Position *EmbeddedObjectPosition `json:"position,omitempty"`
+}
+
 // ChartSpec is what a chart shows. One of the kinds is set.
 type ChartSpec struct {
 	Title      string          `json:"title,omitempty"`
@@ -807,6 +920,12 @@ type ChartSpec struct {
 	FontName   string          `json:"fontName,omitempty"`
 	BasicChart *BasicChartSpec `json:"basicChart,omitempty"`
 	PieChart   *PieChartSpec   `json:"pieChart,omitempty"`
+	// The background is untyped for one reason: a transparent chart is alpha zero, and a
+	// typed colour with omitempty drops exactly that value. Both spellings are written
+	// together because Google keeps the older one for readers that do not know the newer.
+	BackgroundColor      any `json:"backgroundColor,omitempty"`
+	BackgroundColorStyle any `json:"backgroundColorStyle,omitempty"`
+	TitleTextFormat      any `json:"titleTextFormat,omitempty"`
 }
 
 // BasicChartSpec is the family of charts drawn against two axes.
@@ -818,6 +937,22 @@ type BasicChartSpec struct {
 	Domains        []BasicChartDomain `json:"domains,omitempty"`
 	Series         []BasicChartSeries `json:"series,omitempty"`
 	Axis           []BasicChartAxis   `json:"axis,omitempty"`
+	// TotalDataLabel prints the sum over a stacked column. It is the only place the total
+	// appears at all: the segments carry their own values, and on a column stacked from
+	// half a dozen categories none of those numbers is the one a reader wants.
+	TotalDataLabel *DataLabel `json:"totalDataLabel,omitempty"`
+}
+
+// DataLabel is a number printed on the chart rather than left to be read off an axis.
+//
+// Placement is deliberately not offered as a free choice: Google accepts a placement only
+// where it makes sense for the chart type, and refuses the batch otherwise. Leaving it
+// unset lets Sheets put the number where that chart puts numbers.
+type DataLabel struct {
+	Type            string      `json:"type,omitempty"`
+	TextFormat      *SheetsText `json:"textFormat,omitempty"`
+	Placement       string      `json:"placement,omitempty"`
+	CustomLabelData *ChartData  `json:"customLabelData,omitempty"`
 }
 
 // BasicChartDomain is what runs along the bottom.
@@ -827,9 +962,10 @@ type BasicChartDomain struct {
 
 // BasicChartSeries is one line or one set of bars.
 type BasicChartSeries struct {
-	Series     ChartData `json:"series"`
-	TargetAxis string    `json:"targetAxis,omitempty"`
-	Color      *RGBColor `json:"color,omitempty"`
+	Series     ChartData  `json:"series"`
+	TargetAxis string     `json:"targetAxis,omitempty"`
+	Color      *RGBColor  `json:"color,omitempty"`
+	DataLabel  *DataLabel `json:"dataLabel,omitempty"`
 }
 
 // BasicChartAxis is one axis and its title.
@@ -1199,6 +1335,12 @@ type SheetsBatchReply struct {
 	AddSheet *struct {
 		Properties SheetProperties `json:"properties"`
 	} `json:"addSheet,omitempty"`
+	// AddChart is read for the same reason the chart is read back off a tab: the number
+	// Google assigns here is the only handle the chart will ever have, and dropping the
+	// reply meant a chart could be made and then never pointed at.
+	AddChart *struct {
+		Chart EmbeddedChartInfo `json:"chart"`
+	} `json:"addChart,omitempty"`
 }
 
 // SheetsBatchUpdate sends one batch of requests to a workbook.

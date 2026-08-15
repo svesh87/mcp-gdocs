@@ -20,14 +20,17 @@ type Group string
 const (
 	SlidesRead   Group = "slides-read"
 	SlidesWrite  Group = "slides-write"
+	SlidesCopy   Group = "slides-copy"
 	SlidesDelete Group = "slides-delete"
 
 	SheetsRead   Group = "sheets-read"
 	SheetsWrite  Group = "sheets-write"
+	SheetsCopy   Group = "sheets-copy"
 	SheetsDelete Group = "sheets-delete"
 
 	DocsRead   Group = "docs-read"
 	DocsWrite  Group = "docs-write"
+	DocsCopy   Group = "docs-copy"
 	DocsDelete Group = "docs-delete"
 
 	DriveRead   Group = "drive-read"
@@ -54,14 +57,30 @@ var commonTools = map[string]bool{
 // allGroups is every group there is, in the order they are reported.
 var allGroups = []Group{
 	Common,
-	SlidesRead, SlidesWrite, SlidesDelete,
-	SheetsRead, SheetsWrite, SheetsDelete,
-	DocsRead, DocsWrite, DocsDelete,
+	SlidesRead, SlidesWrite, SlidesCopy, SlidesDelete,
+	SheetsRead, SheetsWrite, SheetsCopy, SheetsDelete,
+	DocsRead, DocsWrite, DocsCopy, DocsDelete,
 	DriveRead, DriveWrite, DriveDelete, DriveShare,
 }
 
+// fileCopyTools are the tools whose names say "copy" and whose subject is a file rather
+// than the content of one.
+//
+// The line the copy groups draw is between carrying content from one document into
+// another and duplicating a file on Drive. The first is what an operator may want to
+// forbid — "work here, but do not drag things in from elsewhere" — while the second is
+// how every deck starts, from a copy of a template, and switching that off by accident
+// would break the main way this server is used. There is no drive-copy group for the same
+// reason: a file copy belongs to Drive's ordinary writing.
+var fileCopyTools = map[string]bool{
+	"gdocs_drive_copy":               true,
+	"gdocs_slides_copy_presentation": true,
+}
+
 // families maps a family name to the groups it stands for. Naming a family is shorthand
-// for reading and writing it — never for deleting, which is always spelled out.
+// for reading and writing it — never for deleting, which is always spelled out, and never
+// for carrying content in from another document, which an operator who names a family
+// this precisely is likely to have an opinion about.
 var families = map[string][]Group{
 	"slides": {SlidesRead, SlidesWrite},
 	"sheets": {SheetsRead, SheetsWrite},
@@ -108,6 +127,8 @@ func GroupOf(name string) (Group, error) {
 	switch {
 	case strings.Contains(rest, "delete"):
 		class = "delete"
+	case strings.Contains(rest, "copy") && !fileCopyTools[name]:
+		class = "copy"
 	default:
 		for _, verb := range readingVerbs {
 			if strings.Contains(rest, verb) {
@@ -128,8 +149,9 @@ func GroupOf(name string) (Group, error) {
 }
 
 // defaultGroups is the set a server offers when nothing was asked for: everything except
-// removal and sharing. It is what this server offered before groups existed, so an
-// existing configuration keeps working unchanged.
+// removal and sharing, copying between documents included. A configuration that says
+// nothing gets a server that can do the work, and the two things it does not get are the
+// two whose damage reaches outside the file being edited.
 func defaultGroups() map[Group]bool {
 	enabled := map[Group]bool{}
 	for _, group := range allGroups {

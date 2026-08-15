@@ -2,6 +2,9 @@
   "common": [
     "gdocs_reference"
   ],
+  "docs-copy": [
+    "gdocs_docs_copy_range"
+  ],
   "docs-delete": [
     "gdocs_docs_delete"
   ],
@@ -64,6 +67,10 @@
     "gdocs_drive_rename",
     "gdocs_drive_reply_comment"
   ],
+  "sheets-copy": [
+    "gdocs_sheets_copy_range",
+    "gdocs_sheets_copy_sheet"
+  ],
   "sheets-delete": [
     "gdocs_sheets_delete"
   ],
@@ -110,6 +117,10 @@
     "gdocs_sheets_update_chart",
     "gdocs_sheets_update_properties",
     "gdocs_sheets_write"
+  ],
+  "slides-copy": [
+    "gdocs_slides_copy_element",
+    "gdocs_slides_copy_slide"
   ],
   "slides-delete": [
     "gdocs_slides_delete"

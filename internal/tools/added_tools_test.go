@@ -19,7 +19,27 @@ const spreadsheetForObjects = `{
   "sheets": [
     {"properties": {"sheetId": 0, "title": "Данные", "index": 0,
       "gridProperties": {"rowCount": 100, "columnCount": 10}},
-     "developerMetadata": [{"metadataId": 8, "metadataKey": "source", "metadataValue": "crm"}]},
+     "developerMetadata": [{"metadataId": 8, "metadataKey": "source", "metadataValue": "crm"}],
+     "charts": [
+       {"chartId": 5,
+        "spec": {
+          "title": "Было",
+          "backgroundColor": {"red": 1, "green": 1, "blue": 1},
+          "hiddenDimensionStrategy": "SKIP_HIDDEN_ROWS",
+          "basicChart": {
+            "chartType": "COLUMN", "stackedType": "STACKED", "headerCount": 1,
+            "domains": [{"domain": {"sourceRange": {"sources": [{"sheetId": 0,
+              "startRowIndex": 0, "endRowIndex": 6,
+              "startColumnIndex": 0, "endColumnIndex": 1}]}}}],
+            "series": [
+              {"series": {"sourceRange": {"sources": [{"sheetId": 0,
+                "startRowIndex": 0, "endRowIndex": 6,
+                "startColumnIndex": 1, "endColumnIndex": 2}]}},
+               "targetAxis": "LEFT_AXIS", "color": {"red": 0.2, "green": 0.4, "blue": 0.9}}
+            ]
+          }
+        }}
+     ]},
     {"properties": {"sheetId": 7, "title": "Свод", "index": 1}}
   ]
 }`
@@ -288,6 +308,145 @@ func TestSheetsObjectsAndLabels(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestUpdateChartKeepsWhatItWasNotAskedAbout is the reason the specification is read before
+// it is written. updateChartSpec has no field mask: whatever is sent becomes the chart. A
+// title change built from the caller's arguments alone would replace a chart that draws six
+// months of data with a chart that draws nothing and has a nice title.
+func TestUpdateChartKeepsWhatItWasNotAskedAbout(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).
+		answer(":batchUpdate", `{"spreadsheetId": "book", "replies": [{}]}`).
+		answer("/spreadsheets/book", spreadsheetForObjects))
+
+	h.ok(h.registry.sheetsUpdateChart(context.Background(), request(map[string]any{
+		"spreadsheet_id": "book", "chart_id": 5.0, "title": "Стало",
+	})))
+
+	body := string(h.bodyOf(t, len(h.google.requests)-1))
+	for _, want := range []string{
+		`"title": "Стало"`,
+		// The data survives, and so does everything this server does not model at all.
+		`"chartType": "COLUMN"`,
+		`"stackedType": "STACKED"`,
+		`"hiddenDimensionStrategy": "SKIP_HIDDEN_ROWS"`,
+		`"backgroundColor"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the request should carry %s, got %s", want, body)
+		}
+	}
+}
+
+// TestUpdateChartPrintsTheNumbers: a chart read off a screen during a meeting is read by
+// its printed values, not by eye against an axis. On a stacked column the per-segment
+// numbers stop fitting, and the total over the column is a field of its own.
+func TestUpdateChartPrintsTheNumbers(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).
+		answer(":batchUpdate", `{"spreadsheetId": "book", "replies": [{}]}`).
+		answer("/spreadsheets/book", spreadsheetForObjects))
+
+	h.ok(h.registry.sheetsUpdateChart(context.Background(), request(map[string]any{
+		"spreadsheet_id": "book", "chart_id": 5.0,
+		"data_labels": true, "total_data_labels": true,
+	})))
+
+	body := string(h.bodyOf(t, len(h.google.requests)-1))
+	for _, want := range []string{`"totalDataLabel"`, `"dataLabel"`, `"type": "DATA"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the request should carry %s, got %s", want, body)
+		}
+	}
+}
+
+// TestUpdateChartPaintsItsBackground: a chart standing inside a panel on a slide arrives with
+// a white rectangle of its own and paints over the panel. On a dark seasonal variant of a
+// deck that is not "slightly off" — it is an unreadable slide, and the chart inherits nothing
+// from the deck's palette because it lives in the workbook.
+func TestUpdateChartPaintsItsBackground(t *testing.T) {
+	for _, probe := range []struct {
+		name  string
+		args  map[string]any
+		want  []string
+		avoid string
+	}{
+		{
+			name: "matched to the panel",
+			args: map[string]any{"background_color": "#EEF2F7"},
+			want: []string{`"backgroundColor"`, `"backgroundColorStyle"`, "0.93"},
+		},
+	} {
+		t.Run(probe.name, func(t *testing.T) {
+			h := newHarness(t, newFakeGoogle(t).
+				answer(":batchUpdate", `{"spreadsheetId": "book", "replies": [{}]}`).
+				answer("/spreadsheets/book", spreadsheetForObjects))
+
+			args := map[string]any{"spreadsheet_id": "book", "chart_id": 5.0}
+			for key, value := range probe.args {
+				args[key] = value
+			}
+			h.ok(h.registry.sheetsUpdateChart(context.Background(), request(args)))
+
+			body := string(h.bodyOf(t, len(h.google.requests)-1))
+			for _, want := range probe.want {
+				if !strings.Contains(body, want) {
+					t.Errorf("the request should carry %s, got %s", want, body)
+				}
+			}
+			if probe.avoid != "" && strings.Contains(body, probe.avoid) {
+				t.Errorf("the request should not carry %q, got %s", probe.avoid, body)
+			}
+		})
+	}
+}
+
+// TestUpdateChartRefusesTransparency records what a live chart answered:
+// "chart.backgroundColorStyle.alpha not supported". The parameter exists so that the refusal
+// says so and names the way round it, rather than the caller learning it from Google's own
+// message, which says nothing about what to do instead.
+func TestUpdateChartRefusesTransparency(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).
+		answer(":batchUpdate", `{"spreadsheetId": "book", "replies": [{}]}`).
+		answer("/spreadsheets/book", spreadsheetForObjects))
+
+	message := h.fail(h.registry.sheetsUpdateChart(context.Background(), request(map[string]any{
+		"spreadsheet_id": "book", "chart_id": 5.0, "transparent_background": true,
+	})))
+
+	for _, want := range []string{"alpha", "background_color", "inspect_page"} {
+		if !strings.Contains(message, want) {
+			t.Errorf("the refusal should mention %s, got %s", want, message)
+		}
+	}
+}
+
+// TestUpdateChartRepointsWithoutRebuilding: changing the range keeps the chart's number, and
+// the number is what a slide holds on to. Deleting the chart and drawing it again leaves
+// every slide showing it pointing at nothing.
+func TestUpdateChartRepointsWithoutRebuilding(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).
+		answer(":batchUpdate", `{"spreadsheetId": "book", "replies": [{}]}`).
+		answer("/spreadsheets/book", spreadsheetForObjects))
+
+	h.ok(h.registry.sheetsUpdateChart(context.Background(), request(map[string]any{
+		"spreadsheet_id": "book", "chart_id": 5.0,
+		"data_sheet_title": "Данные", "labels_column": 0.0,
+		"value_columns": []any{1.0, 2.0, 3.0},
+		"start_row":     0.0, "end_row": 92.0,
+	})))
+
+	body := string(h.bodyOf(t, len(h.google.requests)-1))
+	for _, want := range []string{
+		`"endRowIndex": 92`,
+		`"startColumnIndex": 3`,
+		// The first series keeps the colour it had: a range that grew is not a reason for
+		// the chart to change appearance.
+		`"color"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the request should carry %s, got %s", want, body)
+		}
 	}
 }
 

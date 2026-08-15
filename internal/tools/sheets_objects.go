@@ -51,6 +51,33 @@ func (r *registry) registerSheetsObjects(srv *server.MCPServer) {
 		mcp.WithString("subtitle", mcp.Description("New subtitle.")),
 		mcp.WithString("alt_text", mcp.Description("Description for a screen reader.")),
 		mcp.WithString("font", mcp.Description("Font family for the chart's own text.")),
+		mcp.WithNumber("font_size_pt", mcp.Description(
+			"Size of the chart's title text, in points. A chart squeezed onto a slide draws its "+
+				"own text smaller than the shapes beside it.")),
+		mcp.WithString("background_color", mcp.Description(
+			"What the chart is drawn on, as #RRGGBB. A chart sitting inside a panel on a slide "+
+				"arrives with a white rectangle and paints over it; match the panel here. A deck in a "+
+				"dark variant cannot be built without this — the chart lives in the workbook and "+
+				"inherits nothing from the deck's palette.")),
+		mcp.WithBoolean("transparent_background", mcp.Description(
+			"Refused, and here to say why: Google does not accept an alpha on a chart's "+
+				"background at all. Match the panel with background_color instead.")),
+		mcp.WithBoolean("data_labels", mcp.Description(
+			"Print each value on its bar, column or point; false takes the numbers off again.")),
+		mcp.WithBoolean("total_data_labels", mcp.Description(
+			"Print the total over each stacked column; false takes it off. On a column stacked from "+
+				"several categories this is the only place the total appears at all.")),
+		mcp.WithString("data_sheet_title", mcp.Description(
+			"Tab the numbers are on, when the data range is being changed.")),
+		mcp.WithNumber("labels_column", mcp.Description(
+			"Column of the names along the bottom, from 0. Part of changing the data range.")),
+		mcp.WithArray("value_columns", mcp.WithNumberItems(), mcp.Description(
+			"Columns of numbers to draw, from 0. Giving these points the chart at a new range, "+
+				"keeping its number and so keeping every slide that shows it — which deleting and "+
+				"drawing it again does not.")),
+		mcp.WithNumber("start_row", mcp.Description("First row of the data, from 0.")),
+		mcp.WithNumber("end_row", mcp.Description("Row to stop before.")),
+		mcp.WithNumber("header_rows", mcp.Description("How many rows at the top are headings.")),
 	), r.sheetsUpdateChart)
 
 	srv.AddTool(mcp.NewTool("gdocs_sheets_filter_view",
@@ -213,17 +240,20 @@ func (r *registry) sheetsUpdateChart(ctx context.Context, req mcp.CallToolReques
 		})
 	}
 
-	// The words on the chart are part of its specification rather than of its position,
-	// so they go in their own request. Only what the caller named is sent: a specification
-	// is replaced wholesale, and sending an empty one would strip the chart of everything
-	// it draws.
-	spec := &google.ChartSpec{
-		Title:    optionalString(req, "title"),
-		Subtitle: optionalString(req, "subtitle"),
-		AltText:  optionalString(req, "alt_text"),
-		FontName: optionalString(req, "font"),
-	}
-	if spec.Title != "" || spec.Subtitle != "" || spec.AltText != "" || spec.FontName != "" {
+	// Everything drawn on the chart lives in its specification, and updateChartSpec has no
+	// field mask: whatever is sent becomes the chart. So the current specification is read
+	// as Google stores it, changed, and sent back whole. Building a fresh one from the few
+	// fields a caller named would replace the chart with a title and no data.
+	if wantsSpecChange(req) {
+		spec, err := client.ChartSpecOf(ctx, spreadsheetID, chartID)
+		if err != nil {
+			return toolError(err), nil
+		}
+
+		if err := r.patchChartSpec(ctx, client, spreadsheetID, spec, req); err != nil {
+			return toolError(err), nil
+		}
+
 		requests = append(requests, google.SheetsRequest{
 			UpdateChartSpec: &google.UpdateChartSpecRequest{ChartID: chartID, Spec: spec},
 		})
@@ -231,7 +261,8 @@ func (r *registry) sheetsUpdateChart(ctx context.Context, req mcp.CallToolReques
 
 	if len(requests) == 0 {
 		return toolError(fmt.Errorf("nothing to change: give a sheet_title to move it, a border_color, " +
-			"or a title, subtitle, alt_text or font")), nil
+			"a title, subtitle, alt_text or font, data_labels or total_data_labels, or a new data " +
+			"range with data_sheet_title, labels_column, value_columns, start_row and end_row")), nil
 	}
 
 	if _, err := client.SheetsBatchUpdate(ctx, spreadsheetID, requests); err != nil {
@@ -243,6 +274,231 @@ func (r *registry) sheetsUpdateChart(ctx context.Context, req mcp.CallToolReques
 		"chart_id":       chartID,
 		"requests":       len(requests),
 	})
+}
+
+// chartSpecArguments are the ones that change what the chart draws rather than where it sits.
+var chartSpecArguments = []string{
+	"title", "subtitle", "alt_text", "font", "font_size_pt",
+	"data_labels", "total_data_labels",
+	"background_color", "transparent_background",
+	"data_sheet_title", "labels_column", "value_columns", "start_row", "end_row",
+}
+
+// patchChartBackground sets what the chart is drawn on.
+//
+// It matters more than it sounds. A chart standing inside a rounded panel on a slide arrives
+// with a white rectangle of its own and paints over the panel: the panel's corners show and
+// its field does not. And a deck that exists in a dark variant cannot be built at all
+// without this — the chart lives in the workbook and inherits nothing from the deck's
+// palette, so a white background on a dark panel is not "slightly off", it is an unreadable
+// slide.
+func patchChartBackground(spec map[string]any, req mcp.CallToolRequest) error {
+	// Transparency is refused here rather than sent, because Google refuses it too and says
+	// so in a way nobody would find twice: "chart.backgroundColorStyle.alpha not supported".
+	// Verified on a live chart. The parameter stays so the answer explains the way round it.
+	if req.GetBool("transparent_background", false) {
+		return fmt.Errorf("a chart cannot be drawn on nothing: Google refuses an alpha on a " +
+			"chart's background outright — \"chart.backgroundColorStyle.alpha not supported\". " +
+			"Match the panel instead: read its fill with gdocs_slides_inspect_page and pass that " +
+			"colour as background_color. On a deck with light and dark variants that means one " +
+			"background_color per variant, and there is no way round it — the chart lives in the " +
+			"workbook and inherits nothing from the deck's palette")
+	}
+
+	colour := optionalString(req, "background_color")
+	if colour == "" {
+		return nil
+	}
+
+	rgb, err := parseHexColor(colour)
+	if err != nil {
+		return err
+	}
+
+	// Both fields are written. Google keeps the older backgroundColor for readers that only
+	// know it, and a chart left with the two disagreeing is drawn by whichever the renderer
+	// happens to prefer.
+	value := map[string]any{"red": rgb.Red, "green": rgb.Green, "blue": rgb.Blue}
+	spec["backgroundColor"] = value
+	spec["backgroundColorStyle"] = map[string]any{"rgbColor": value}
+
+	return nil
+}
+
+func wantsSpecChange(req mcp.CallToolRequest) bool {
+	arguments := req.GetArguments()
+	for _, name := range chartSpecArguments {
+		if _, given := arguments[name]; given {
+			return true
+		}
+	}
+
+	return false
+}
+
+// patchChartSpec changes the named parts of a chart's own specification, in place.
+//
+// It works on the map Google sent rather than on a struct, so everything this server does
+// not model survives: a background colour, a per-series line style, a hidden-dimension
+// strategy. Only the keys named here are touched.
+func (r *registry) patchChartSpec(ctx context.Context, client *google.Client, spreadsheetID string,
+	spec map[string]any, req mcp.CallToolRequest) error {
+	for _, word := range []struct{ argument, key string }{
+		{"title", "title"},
+		{"subtitle", "subtitle"},
+		{"alt_text", "altText"},
+		{"font", "fontName"},
+	} {
+		if text := optionalString(req, word.argument); text != "" {
+			spec[word.key] = text
+		}
+	}
+
+	if err := patchChartBackground(spec, req); err != nil {
+		return err
+	}
+
+	if size := req.GetFloat("font_size_pt", 0); size > 0 {
+		// The size lives inside the chart's own text format, which is also where the font
+		// name would go if it were set this way. Only the size is touched: replacing the
+		// whole format would drop a colour or a weight somebody set in the editor.
+		format, ok := spec["titleTextFormat"].(map[string]any)
+		if !ok {
+			format = map[string]any{}
+		}
+		format["fontSize"] = size
+		spec["titleTextFormat"] = format
+	}
+
+	arguments := req.GetArguments()
+	_, wantsLabels := arguments["data_labels"]
+	_, wantsTotals := arguments["total_data_labels"]
+	_, wantsRange := arguments["value_columns"]
+
+	if !wantsLabels && !wantsTotals && !wantsRange {
+		return nil
+	}
+
+	basic, ok := spec["basicChart"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("this chart is not one of the kinds drawn against two axes, so it has " +
+			"no series to label and no data range to change: labels and ranges apply to column, bar, " +
+			"line, area, stepped area and scatter charts")
+	}
+
+	if wantsRange {
+		if err := r.patchChartRange(ctx, client, spreadsheetID, basic, req); err != nil {
+			return err
+		}
+	}
+
+	if wantsTotals {
+		if req.GetBool("total_data_labels", false) {
+			basic["totalDataLabel"] = map[string]any{"type": "DATA"}
+		} else {
+			delete(basic, "totalDataLabel")
+		}
+	}
+
+	if wantsLabels {
+		series, _ := basic["series"].([]any)
+		on := req.GetBool("data_labels", false)
+		for _, item := range series {
+			one, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if on {
+				one["dataLabel"] = map[string]any{"type": "DATA"}
+			} else {
+				delete(one, "dataLabel")
+			}
+		}
+	}
+
+	return nil
+}
+
+// patchChartRange points an existing chart at different columns or a different span of rows.
+//
+// This is the difference between changing a chart and rebuilding it, and the difference
+// matters outside the workbook: a chart put on a slide is linked by its number, and a chart
+// deleted and made again comes back with a new one, leaving the slide pointing at nothing.
+func (r *registry) patchChartRange(ctx context.Context, client *google.Client, spreadsheetID string,
+	basic map[string]any, req mcp.CallToolRequest) error {
+	dataSheet, err := requiredString(req, "data_sheet_title")
+	if err != nil {
+		return fmt.Errorf("changing the data range needs data_sheet_title, the tab the numbers are on: %w", err)
+	}
+
+	sheetID, err := r.sheetIDOf(ctx, client, spreadsheetID, dataSheet)
+	if err != nil {
+		return err
+	}
+
+	startRow, err := req.RequireInt("start_row")
+	if err != nil {
+		return err
+	}
+	endRow, err := req.RequireInt("end_row")
+	if err != nil {
+		return err
+	}
+	if startRow < 0 || endRow <= startRow {
+		return fmt.Errorf("the data is empty: end_row is exclusive and both count from 0")
+	}
+
+	labels, err := req.RequireInt("labels_column")
+	if err != nil {
+		return err
+	}
+	values, err := intList(req, "value_columns")
+	if err != nil {
+		return err
+	}
+	if len(values) == 0 {
+		return fmt.Errorf("value_columns is empty: a chart needs at least one column of numbers")
+	}
+
+	column := func(index int) map[string]any {
+		return map[string]any{"sourceRange": map[string]any{"sources": []any{map[string]any{
+			"sheetId":          sheetID,
+			"startRowIndex":    startRow,
+			"endRowIndex":      endRow,
+			"startColumnIndex": index,
+			"endColumnIndex":   index + 1,
+		}}}}
+	}
+
+	basic["domains"] = []any{map[string]any{"domain": column(labels)}}
+
+	// The series that were there are replaced rather than edited, but each new one keeps
+	// the look of the one it stands in for: dropping the colour of series three because the
+	// range grew is a chart that changed appearance for no reason a reader can see.
+	previous, _ := basic["series"].([]any)
+	rebuilt := make([]any, 0, len(values))
+	for index, valueColumn := range values {
+		one := map[string]any{"series": column(valueColumn), "targetAxis": "LEFT_AXIS"}
+		if index < len(previous) {
+			if old, ok := previous[index].(map[string]any); ok {
+				for _, keep := range []string{"targetAxis", "color", "colorStyle", "dataLabel",
+					"lineStyle", "type", "pointStyle"} {
+					if value, present := old[keep]; present {
+						one[keep] = value
+					}
+				}
+			}
+		}
+		rebuilt = append(rebuilt, one)
+	}
+	basic["series"] = rebuilt
+
+	if header, given := req.GetArguments()["header_rows"]; given {
+		_ = header
+		basic["headerCount"] = req.GetInt("header_rows", 1)
+	}
+
+	return nil
 }
 
 func (r *registry) sheetsFilterView(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

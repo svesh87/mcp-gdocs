@@ -39,7 +39,8 @@ func elementMask(depth int) string {
 		"table(rows,columns,tableColumns(columnWidth),tableRows(rowHeight))," +
 		"image(contentUrl,imageProperties(cropProperties,transparency,brightness,contrast,outline))," +
 		"video(url,source,id)," +
-		"line(lineType,lineCategory,lineProperties(lineFill,weight,dashStyle,startArrow,endArrow))"
+		"line(lineType,lineCategory,lineProperties(lineFill,weight,dashStyle,startArrow,endArrow))," +
+		"sheetsChart(spreadsheetId,chartId,contentUrl)"
 
 	if depth > 0 {
 		mask += ",elementGroup(children(" + elementMask(depth-1) + "))"
@@ -206,6 +207,19 @@ type describedImage struct {
 	Outline      *describedOutline `json:"outline,omitempty"`
 }
 
+// describedSheetsChart is a chart on a slide, named by where it came from.
+//
+// The pair of identifiers is the point: gdocs_slides_refresh_sheets_chart pulls the current
+// numbers in by them, and a reader comparing a deck against its workbook has nothing else
+// to compare by.
+type describedSheetsChart struct {
+	SpreadsheetID string `json:"spreadsheet_id,omitempty"`
+	ChartID       int    `json:"chart_id,omitempty"`
+	// ContentURL is the chart rendered as a picture, under the same short-lived,
+	// account-tagged address as every other image Slides hands out.
+	ContentURL string `json:"content_url,omitempty"`
+}
+
 // describedCrop is how much of each side is cut away, as a fraction of the picture.
 type describedCrop struct {
 	Left   float64 `json:"left,omitempty"`
@@ -269,6 +283,10 @@ type describedElement struct {
 	Image    *describedImage `json:"image,omitempty"`
 	Line     *describedLine  `json:"line,omitempty"`
 	VideoURL string          `json:"video_url,omitempty"`
+	// SheetsChart is a chart standing on the slide. Without it a chart reads as an element
+	// with a box and nothing else: visibly there, and impossible to tell from a picture, to
+	// check against its workbook, or to refresh.
+	SheetsChart *describedSheetsChart `json:"sheets_chart,omitempty"`
 	// Children are the elements of a group, with their boxes already composed with the
 	// group's transform — the numbers to place a copy at, not the raw ones.
 	Children []describedElement `json:"children,omitempty"`
@@ -456,6 +474,14 @@ func describeElements(elements []google.PageElement, parent *google.Transform) [
 
 		if video := element.Video; video != nil {
 			entry.VideoURL = video.URL
+		}
+
+		if chart := element.SheetsChart; chart != nil {
+			entry.SheetsChart = &describedSheetsChart{
+				SpreadsheetID: chart.SpreadsheetID,
+				ChartID:       chart.ChartID,
+				ContentURL:    chart.ContentURL,
+			}
 		}
 
 		if group := element.ElementGroup; group != nil {

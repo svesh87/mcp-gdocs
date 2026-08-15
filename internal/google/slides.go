@@ -855,6 +855,16 @@ type BatchReply struct {
 	ReplaceAllText *struct {
 		OccurrencesChanged int `json:"occurrencesChanged"`
 	} `json:"replaceAllText,omitempty"`
+	// The two shape replacements answer the same way and for the same reason. A batch that
+	// matched no shape at all succeeds: Google is not asked to find anything, only to
+	// replace whatever matches, and replacing nothing is a valid outcome. Without the count
+	// a caller cannot tell "the chart is on the slide" from "the text did not match".
+	ReplaceAllShapesWithSheetsChart *struct {
+		OccurrencesChanged int `json:"occurrencesChanged"`
+	} `json:"replaceAllShapesWithSheetsChart,omitempty"`
+	ReplaceAllShapesWithImage *struct {
+		OccurrencesChanged int `json:"occurrencesChanged"`
+	} `json:"replaceAllShapesWithImage,omitempty"`
 }
 
 // Presentation is a deck as far as this server reads it.
@@ -1132,6 +1142,22 @@ type PageElement struct {
 	Video        *Video        `json:"video,omitempty"`
 	Line         *Line         `json:"line,omitempty"`
 	ElementGroup *ElementGroup `json:"elementGroup,omitempty"`
+	SheetsChart  *SheetsChart  `json:"sheetsChart,omitempty"`
+}
+
+// SheetsChart is a chart carried over from a workbook and standing on a slide.
+//
+// Reading it back matters as much as putting it there. A chart arrives on a slide with the
+// identifier of the workbook and of the chart inside it, and those two are what
+// gdocs_slides_refresh_sheets_chart needs to pull the current numbers in. Without them a
+// chart on a slide reads as an anonymous element: visibly there, impossible to check
+// against its source and impossible to refresh.
+type SheetsChart struct {
+	SpreadsheetID string `json:"spreadsheetId,omitempty"`
+	ChartID       int    `json:"chartId,omitempty"`
+	// ContentURL is the rendered chart as a picture, under the same thirty-minute,
+	// account-tagged address as every other image Slides hands out.
+	ContentURL string `json:"contentUrl,omitempty"`
 }
 
 // Shape is a text box or a figure.

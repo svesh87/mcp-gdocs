@@ -1,0 +1,341 @@
+{
+  "requests": [
+    {
+      "createSlide": {
+        "objectId": "slide_test",
+        "slideLayoutReference": {
+          "layoutId": "target_layout"
+        }
+      }
+    },
+    {
+      "createShape": {
+        "objectId": "shape_test",
+        "shapeType": "TEXT_BOX",
+        "elementProperties": {
+          "pageObjectId": "slide_test",
+          "size": {
+            "width": {
+              "magnitude": 3000000,
+              "unit": "EMU"
+            },
+            "height": {
+              "magnitude": 3000000,
+              "unit": "EMU"
+            }
+          },
+          "transform": {
+            "scaleX": 2.8,
+            "scaleY": 0.16,
+            "translateX": 311700,
+            "translateY": 190500,
+            "unit": "EMU"
+          }
+        }
+      }
+    },
+    {
+      "updateShapeProperties": {
+        "objectId": "shape_test",
+        "shapeProperties": {
+          "shapeBackgroundFill": {
+            "propertyState": "RENDERED",
+            "solidFill": {
+              "color": {
+                "rgbColor": {
+                  "red": 0.95,
+                  "green": 0.96,
+                  "blue": 0.98
+                }
+              },
+              "alpha": 1
+            }
+          },
+          "contentAlignment": "MIDDLE"
+        },
+        "fields": "shapeBackgroundFill,contentAlignment"
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "shape_test",
+        "text": "Итоги августа",
+        "insertionIndex": 0
+      }
+    },
+    {
+      "updateTextStyle": {
+        "objectId": "shape_test",
+        "textRange": {
+          "type": "FIXED_RANGE",
+          "startIndex": 0,
+          "endIndex": 6
+        },
+        "style": {
+          "bold": true,
+          "fontSize": {
+            "magnitude": 24,
+            "unit": "PT"
+          }
+        },
+        "fields": "bold,fontSize"
+      }
+    },
+    {
+      "updateTextStyle": {
+        "objectId": "shape_test",
+        "textRange": {
+          "type": "FIXED_RANGE",
+          "startIndex": 6,
+          "endIndex": 13
+        },
+        "style": {
+          "italic": true
+        },
+        "fields": "italic"
+      }
+    },
+    {
+      "updateParagraphStyle": {
+        "objectId": "shape_test",
+        "textRange": {
+          "type": "FIXED_RANGE",
+          "startIndex": 0,
+          "endIndex": 13
+        },
+        "style": {
+          "alignment": "START"
+        },
+        "fields": "alignment"
+      }
+    },
+    {
+      "createShape": {
+        "objectId": "shape_test",
+        "shapeType": "TEXT_BOX",
+        "elementProperties": {
+          "pageObjectId": "slide_test",
+          "transform": {
+            "scaleX": 1,
+            "scaleY": 1,
+            "translateX": 311700,
+            "translateY": 900000,
+            "unit": "EMU"
+          }
+        }
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "shape_test",
+        "text": "Закрыли долг",
+        "insertionIndex": 0
+      }
+    },
+    {
+      "updateParagraphStyle": {
+        "objectId": "shape_test",
+        "textRange": {
+          "type": "FIXED_RANGE",
+          "startIndex": 0,
+          "endIndex": 12
+        },
+        "style": {
+          "alignment": "START"
+        },
+        "fields": "alignment"
+      }
+    },
+    {
+      "createParagraphBullets": {
+        "objectId": "shape_test",
+        "textRange": {
+          "type": "FIXED_RANGE",
+          "startIndex": 0,
+          "endIndex": 12
+        },
+        "bulletPreset": "BULLET_DISC_CIRCLE_SQUARE"
+      }
+    },
+    {
+      "createTable": {
+        "objectId": "table_test",
+        "elementProperties": {
+          "pageObjectId": "slide_test",
+          "transform": {
+            "scaleX": 1,
+            "scaleY": 1,
+            "translateX": 500000,
+            "translateY": 2000000,
+            "unit": "EMU"
+          }
+        },
+        "rows": 2,
+        "columns": 2
+      }
+    },
+    {
+      "updateTableColumnProperties": {
+        "objectId": "table_test",
+        "columnIndices": [
+          0
+        ],
+        "tableColumnProperties": {
+          "columnWidth": {
+            "magnitude": 2000000,
+            "unit": "EMU"
+          }
+        },
+        "fields": "columnWidth"
+      }
+    },
+    {
+      "updateTableColumnProperties": {
+        "objectId": "table_test",
+        "columnIndices": [
+          1
+        ],
+        "tableColumnProperties": {
+          "columnWidth": {
+            "magnitude": 1500000,
+            "unit": "EMU"
+          }
+        },
+        "fields": "columnWidth"
+      }
+    },
+    {
+      "mergeTableCells": {
+        "objectId": "table_test",
+        "tableRange": {
+          "location": {
+            "rowIndex": 0,
+            "columnIndex": 0
+          },
+          "rowSpan": 1,
+          "columnSpan": 2
+        }
+      }
+    },
+    {
+      "updateTableCellProperties": {
+        "objectId": "table_test",
+        "tableRange": {
+          "location": {
+            "rowIndex": 0,
+            "columnIndex": 0
+          },
+          "rowSpan": 1,
+          "columnSpan": 1
+        },
+        "tableCellProperties": {
+          "tableCellBackgroundFill": {
+            "solidFill": {
+              "color": {
+                "rgbColor": {
+                  "red": 0.9
+                }
+              }
+            }
+          },
+          "contentAlignment": "MIDDLE"
+        },
+        "fields": "tableCellBackgroundFill,contentAlignment"
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 0,
+          "columnIndex": 0
+        },
+        "text": "Команда",
+        "insertionIndex": 0
+      }
+    },
+    {
+      "updateTextStyle": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 0,
+          "columnIndex": 0
+        },
+        "textRange": {
+          "type": "FIXED_RANGE",
+          "startIndex": 0,
+          "endIndex": 7
+        },
+        "style": {
+          "bold": true
+        },
+        "fields": "bold"
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 0
+        },
+        "text": "SRE",
+        "insertionIndex": 0
+      }
+    },
+    {
+      "insertText": {
+        "objectId": "table_test",
+        "cellLocation": {
+          "rowIndex": 1,
+          "columnIndex": 1
+        },
+        "text": "12",
+        "insertionIndex": 0
+      }
+    },
+    {
+      "createImage": {
+        "objectId": "image_test",
+        "url": "https://example.invalid/pic.png",
+        "elementProperties": {
+          "pageObjectId": "slide_test",
+          "transform": {
+            "scaleX": 1,
+            "scaleY": 1,
+            "translateX": 6000000,
+            "translateY": 900000,
+            "unit": "EMU"
+          }
+        }
+      }
+    },
+    {
+      "updateImageProperties": {
+        "objectId": "image_test",
+        "imageProperties": {
+          "transparency": 0.25
+        },
+        "fields": "transparency"
+      }
+    },
+    {
+      "createSheetsChart": {
+        "objectId": "chart_test",
+        "spreadsheetId": "book",
+        "chartId": 4242,
+        "linkingMode": "LINKED",
+        "elementProperties": {
+          "pageObjectId": "slide_test",
+          "transform": {
+            "scaleX": 1,
+            "scaleY": 1,
+            "translateX": 500000,
+            "translateY": 3500000,
+            "unit": "EMU"
+          }
+        }
+      }
+    }
+  ]
+}

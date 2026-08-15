@@ -380,25 +380,73 @@ const presentationWithMixedRuns = `{
   ]
 }`
 
-// TestNoCopyingTools keeps the server on the read-then-write shape. A tool that copies a
-// style from one deck into another answers "make this look like that", which is not the
-// job: the job is to build a deck that looks right, having read how a dozen others are
-// built — and copying hides the numbers a caller would decide with.
+// TestCopyingIsItsOwnGroup keeps the line the copy groups draw where it is.
 //
-// The API offers more than this: a tab can be copied wholesale into another workbook, and
-// a rectangle's formatting pasted onto another. Both are refused here on purpose. They
-// answer "make this look like that" across documents, which is the thing this server does
-// not do — everything it writes has to be something a caller could have decided and named.
-func TestNoCopyingTools(t *testing.T) {
+// Copying between documents was once refused outright, and the reason was about learning
+// rather than about the work: a deck that matched its sample by being copied proved nothing
+// about whether the server could build one. That is settled, and the tools exist — but they
+// are the class of thing an operator may want to switch off on its own, so every tool that
+// carries content in from another document lands in a *-copy group and nowhere else.
+//
+// The two exceptions are named rather than derived. Copying a file is Drive's ordinary
+// writing and is how every deck starts, from a copy of a template; putting it behind the
+// copy switch would break the main way this server is used.
+func TestCopyingIsItsOwnGroup(t *testing.T) {
 	wholeFiles := map[string]bool{
 		"gdocs_drive_copy":               true,
 		"gdocs_slides_copy_presentation": true,
 	}
 
+	found := 0
 	for _, name := range registeredTools(t, true) {
-		if strings.Contains(name, "copy_") && !wholeFiles[name] {
-			t.Errorf("%s copies styling between documents; reading and writing are separate here", name)
+		if !strings.Contains(name, "copy_") {
+			continue
 		}
+
+		group, err := GroupOf(name)
+		if err != nil {
+			t.Errorf("%v", err)
+			continue
+		}
+
+		if wholeFiles[name] {
+			if !strings.HasSuffix(string(group), "-write") {
+				t.Errorf("%s copies a whole file and belongs in a write group, not %s", name, group)
+			}
+			continue
+		}
+
+		found++
+		if !strings.HasSuffix(string(group), "-copy") {
+			t.Errorf("%s carries content in from another document and belongs in a copy group, not %s",
+				name, group)
+		}
+	}
+
+	if found == 0 {
+		t.Error("no copying tools are registered at all, which is not what this server offers")
+	}
+}
+
+// TestCopyingIsNotInAFamilyShorthand: naming a family asks for reading and writing it.
+// Carrying content in from somewhere else is a separate decision, and an operator who
+// spelled out --tools=slides did not make it.
+func TestCopyingIsNotInAFamilyShorthand(t *testing.T) {
+	enabled, err := ParseGroups("slides")
+	if err != nil {
+		t.Fatalf("parsing: %v", err)
+	}
+
+	if enabled[SlidesCopy] {
+		t.Error("--tools=slides should not switch copying on by itself")
+	}
+	if !enabled[SlidesWrite] {
+		t.Error("--tools=slides should still switch writing on")
+	}
+
+	// A configuration that says nothing gets copying, because the work needs it.
+	if !defaultGroups()[SlidesCopy] {
+		t.Error("the default set should offer copying")
 	}
 }
 

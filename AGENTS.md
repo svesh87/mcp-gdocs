@@ -23,6 +23,17 @@ below are the ones that are expensive to rediscover; the rest of the reasoning i
 - **No arbitrary `batchUpdate`.** A caller must not be able to hand this server its own
   list of API requests. Assembled batches are exactly what puts text boxes at invented
   coordinates and leaves a deck looking broken. Every tool builds its own requests.
+- **Copying carries content, never a look.** Bringing a slide, a tab or a stretch of a
+  document in from elsewhere is ordinary work and has tools of its own, in groups of their
+  own — `slides-copy`, `sheets-copy`, `docs-copy`. A copy of a *file* is Drive's ordinary
+  writing and stays in `*-write`; `fileCopyTools` in `groups.go` names the two exceptions,
+  because putting them behind the copy switch would break starting a deck from a template.
+  What stays refused is "make this look like that": a style moved behind the caller's back
+  hides the numbers it was made of. Google gives one real cross-document request,
+  `sheets.copyTo`; everywhere else the source is read and built again in **one pass** — an
+  image address dies in about thirty minutes — and whatever could not be carried is **named
+  in the answer**. A copying tool that reports success while quietly leaving a table behind
+  is a defect, not a limitation.
 - **No service account, no domain-wide delegation.** The server acts as the person who
   signed in, and nothing else. The reasoning is in `docs/SETUP.md`; it is not a default
   to revisit casually.

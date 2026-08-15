@@ -104,6 +104,44 @@ fill a table from its **last** cell backwards, or every insertion moves the next
 | a Google drawing | `kind: "drawing"` | **nothing reads or creates one** |
 | removing either | — | `delete` with a range, or `positioned_object_id` |
 
+## Bringing content in from another document
+
+The Docs API has no copying request of any kind — forty-odd request types, not one of them
+reaching outside the document being edited — so `gdocs_docs_copy_range` reads the source and
+writes it again. It is in the `docs-copy` group, which the default set offers and
+`--tools=docs` does not.
+
+What crosses: paragraphs with their named style, alignment, indents and spacing; every run
+with its font, size, weight, colour and link; bulleted and numbered lists, made from the
+text rather than typed; inline pictures, by address; page breaks.
+
+What does not, and is named in `not_carried` instead:
+
+| Left behind | Why | What to do |
+|---|---|---|
+| a table | its cells only get indices once it exists, and those are not predictable from the request that made it | `insert_table`, then `edit_table` |
+| a section break | it carries page setup and its own headers | `insert_section_break`, then `style_section` |
+| a person or file chip | it is a live object, not text | `insert_chip` |
+| a horizontal rule | the API has no request for one | — |
+| a drawing | the API reports it with no address at all, so there is nothing to fetch | a person pastes it |
+
+Indices are the document's own, as `read_structure` reports them, and they count **UTF-16
+code units**. Every style the copy writes names a range in the *target's* coordinates, not
+the source's — that arithmetic is most of what the tool does, and it is why a range cannot
+simply be replayed. Without a `target_index` the copy lands at the end of the body, which is
+one index before the segment's end: Docs keeps a final newline nothing may be inserted after.
+
+The address of a picture is signed and lives about thirty minutes, so read and write in one
+pass.
+
+```
+gdocs_docs_copy_range
+  source_document_id: 1nUu…  start_index: 1240  end_index: 1980
+  target_document_id: 1cIX…
+→ {"paragraphs": 7, "characters": 740,
+   "not_carried": ["a table of 4 by 3, which has to be made separately …"]}
+```
+
 ## Pointing at a place that does not move
 
 Every index in this file shifts when anything is inserted before it. A **named range** does

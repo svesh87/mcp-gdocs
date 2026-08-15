@@ -137,6 +137,91 @@ func TestInspectPageReportsWhatAListingDoesNot(t *testing.T) {
 	}
 }
 
+// presentationWithChart is a slide carrying a chart brought over from a workbook, which is
+// what a frame looks like after gdocs_slides_replace_shapes_with_chart has been through it.
+const presentationWithChart = `{
+  "presentationId": "deck",
+  "title": "Демо",
+  "pageSize": {"width": {"magnitude": 9144000, "unit": "EMU"}, "height": {"magnitude": 5143500, "unit": "EMU"}},
+  "slides": [
+    {
+      "objectId": "slideChart",
+      "pageElements": [
+        {"objectId": "chart1",
+         "size": {"width": {"magnitude": 3000000, "unit": "EMU"}, "height": {"magnitude": 3000000, "unit": "EMU"}},
+         "transform": {"scaleX": 1.76, "scaleY": 1.21, "translateX": 311700, "translateY": 793040, "unit": "EMU"},
+         "sheetsChart": {"spreadsheetId": "book", "chartId": 729808553,
+           "contentUrl": "https://example.invalid/chart.png"}}
+      ]
+    }
+  ]
+}`
+
+// TestReplaceShapesWithChartCountsWhatItChanged: a batch that matched no shape succeeds, so
+// without the count "the chart is on the slide" and "the text did not match" look the same
+// from the caller's side, and the second is only noticed when somebody opens the deck.
+func TestReplaceShapesWithChartCountsWhatItChanged(t *testing.T) {
+	for _, probe := range []struct {
+		name  string
+		reply string
+		want  []string
+		avoid string
+	}{
+		{
+			name:  "the frame was there",
+			reply: `{"replies": [{"replaceAllShapesWithSheetsChart": {"occurrencesChanged": 1}}]}`,
+			want:  []string{`"shapes_replaced": 1`},
+			avoid: "no shape matched",
+		},
+		{
+			name:  "nothing matched",
+			reply: `{"replies": [{"replaceAllShapesWithSheetsChart": {}}]}`,
+			want:  []string{`"shapes_replaced": 0`, "no shape matched"},
+		},
+	} {
+		t.Run(probe.name, func(t *testing.T) {
+			h := newHarness(t, newFakeGoogle(t).answer(":batchUpdate", probe.reply))
+
+			answer := h.ok(h.registry.slidesReplaceShapesWithChart(context.Background(), request(map[string]any{
+				"presentation_id": "deck", "contains_text": "Место под график",
+				"spreadsheet_id": "book", "chart_id": 729808553.0,
+			})))
+
+			for _, want := range probe.want {
+				if !strings.Contains(answer, want) {
+					t.Errorf("the answer should carry %s, got %s", want, answer)
+				}
+			}
+			if probe.avoid != "" && strings.Contains(answer, probe.avoid) {
+				t.Errorf("the answer should not carry %q, got %s", probe.avoid, answer)
+			}
+		})
+	}
+}
+
+// TestInspectPageNamesAChart: a chart read without its identifiers is an element with a box
+// and nothing else — indistinguishable from a picture, uncheckable against its workbook and
+// unrefreshable, because gdocs_slides_refresh_sheets_chart has nothing to address.
+func TestInspectPageNamesAChart(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).answer("/presentations/deck", presentationWithChart))
+
+	answer := h.ok(h.registry.slidesInspectPage(context.Background(), request(map[string]any{
+		"presentation_id": "deck",
+		"page_object_id":  "slideChart",
+	})))
+
+	for _, want := range []string{
+		`"kind": "sheets_chart"`,
+		`"spreadsheet_id": "book"`,
+		`"chart_id": 729808553`,
+		`"content_url": "https://example.invalid/chart.png"`,
+	} {
+		if !strings.Contains(answer, want) {
+			t.Errorf("the reading should carry %s, got %s", want, answer)
+		}
+	}
+}
+
 // TestInspectPageReportsATransparentFill is the reading a real deck corrected. A text box
 // sitting on a coloured panel carries a solid fill of black at alpha 0 — "no fill" written
 // the long way. Reported as a colour with the alpha dropped, it reads as a black box, and

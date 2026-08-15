@@ -410,18 +410,36 @@ func (r *registry) slidesReplaceShapesWithImage(ctx context.Context, req mcp.Cal
 		return toolError(err), nil
 	}
 
-	if _, err := client.SlidesBatchUpdate(ctx, presentationID, []google.Request{{
+	response, err := client.SlidesBatchUpdate(ctx, presentationID, []google.Request{{
 		ReplaceShapesWithImage: &google.ReplaceShapesWithImageRequest{
 			ContainsText:  &google.SlidesTextMatch{Text: text, MatchCase: req.GetBool("match_case", true)},
 			ImageURL:      url,
 			Method:        req.GetString("method", "CENTER_INSIDE"),
 			PageObjectIDs: pages,
 		},
-	}}); err != nil {
+	}})
+	if err != nil {
 		return toolError(err), nil
 	}
 
-	return resultJSON(map[string]any{"presentation_id": presentationID, "contains_text": text})
+	replaced := 0
+	for _, reply := range response.Replies {
+		if reply.ReplaceAllShapesWithImage != nil {
+			replaced += reply.ReplaceAllShapesWithImage.OccurrencesChanged
+		}
+	}
+
+	payload := map[string]any{
+		"presentation_id": presentationID,
+		"contains_text":   text,
+		"shapes_replaced": replaced,
+	}
+	if replaced == 0 {
+		payload["note"] = "no shape matched, so nothing changed: check contains_text, match_case " +
+			"and page_object_ids against what gdocs_slides_inspect_page reports"
+	}
+
+	return resultJSON(payload)
 }
 
 func (r *registry) slidesReplaceShapesWithChart(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -457,7 +475,7 @@ func (r *registry) slidesReplaceShapesWithChart(ctx context.Context, req mcp.Cal
 		return toolError(err), nil
 	}
 
-	if _, err := client.SlidesBatchUpdate(ctx, presentationID, []google.Request{{
+	response, err := client.SlidesBatchUpdate(ctx, presentationID, []google.Request{{
 		ReplaceShapesWithChart: &google.ReplaceShapesWithChartRequest{
 			ContainsText:  &google.SlidesTextMatch{Text: text, MatchCase: req.GetBool("match_case", true)},
 			SpreadsheetID: spreadsheetID,
@@ -465,15 +483,33 @@ func (r *registry) slidesReplaceShapesWithChart(ctx context.Context, req mcp.Cal
 			LinkingMode:   linking,
 			PageObjectIDs: pages,
 		},
-	}}); err != nil {
+	}})
+	if err != nil {
 		return toolError(err), nil
 	}
 
-	return resultJSON(map[string]any{
+	// A batch that matched no shape succeeds, so the count is the whole of the answer:
+	// without it "the chart is on the slide" and "the text matched nothing" look the same
+	// from here, and the second one is only noticed when somebody opens the deck.
+	replaced := 0
+	for _, reply := range response.Replies {
+		if reply.ReplaceAllShapesWithSheetsChart != nil {
+			replaced += reply.ReplaceAllShapesWithSheetsChart.OccurrencesChanged
+		}
+	}
+
+	payload := map[string]any{
 		"presentation_id": presentationID,
 		"contains_text":   text,
 		"linking_mode":    linking,
-	})
+		"shapes_replaced": replaced,
+	}
+	if replaced == 0 {
+		payload["note"] = "no shape matched, so nothing changed: check contains_text, match_case " +
+			"and page_object_ids against what gdocs_slides_inspect_page reports"
+	}
+
+	return resultJSON(payload)
 }
 
 func (r *registry) slidesSetAltText(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

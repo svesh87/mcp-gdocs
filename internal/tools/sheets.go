@@ -24,11 +24,14 @@ func (r *registry) registerSheets(srv *server.MCPServer) {
 	r.registerSheetsDelete(srv)
 	r.registerSheetsMove(srv)
 	r.registerSheetsObjects(srv)
+	r.registerSheetsCopy(srv)
 
 	srv.AddTool(mcp.NewTool("gdocs_sheets_info",
-		mcp.WithDescription("Describe a spreadsheet: its title, its tabs, their identifiers and sizes. "+
-			"Read this before addressing a range — a tab renamed since somebody wrote the range down is "+
-			"the usual reason a read comes back empty."),
+		mcp.WithDescription("Describe a spreadsheet: its title, its tabs, their identifiers and sizes, and "+
+			"the charts on each tab with the number that addresses them. Read this before addressing a "+
+			"range — a tab renamed since somebody wrote the range down is the usual reason a read comes "+
+			"back empty — and before putting a chart on a slide, because chart_id from here is what "+
+			"gdocs_slides_add_sheets_chart and gdocs_slides_replace_shapes_with_chart take."),
 		mcp.WithString("spreadsheet_id", mcp.Required(), mcp.Description(spreadsheetIDHelp)),
 		mcp.WithReadOnlyHintAnnotation(true),
 	), r.sheetsInfo)
@@ -189,6 +192,45 @@ func (r *registry) registerSheets(srv *server.MCPServer) {
 	), r.sheetsSetValidation)
 }
 
+// chartEntry is a chart as a reading reports it.
+//
+// The number is the whole point: gdocs_slides_add_sheets_chart and
+// gdocs_slides_replace_shapes_with_chart put a chart on a slide by it, and
+// gdocs_sheets_update_chart changes one by it. The title and the anchor are here so that a
+// tab holding three charts can be told apart without opening it in a browser.
+type chartEntry struct {
+	ChartID      int    `json:"chart_id"`
+	Title        string `json:"title,omitempty"`
+	OwnTab       bool   `json:"own_tab,omitempty"`
+	AnchorRow    int    `json:"anchor_row,omitempty"`
+	AnchorColumn int    `json:"anchor_column,omitempty"`
+}
+
+// chartsOf describes the charts of one tab.
+func chartsOf(charts []google.EmbeddedChartInfo) []chartEntry {
+	if len(charts) == 0 {
+		return nil
+	}
+
+	entries := make([]chartEntry, 0, len(charts))
+	for _, chart := range charts {
+		entry := chartEntry{ChartID: chart.ChartID}
+		if chart.Spec != nil {
+			entry.Title = chart.Spec.Title
+		}
+		if chart.Position != nil {
+			entry.OwnTab = chart.Position.NewSheet
+			if overlay := chart.Position.OverlayPosition; overlay != nil {
+				entry.AnchorRow = overlay.AnchorCell.RowIndex
+				entry.AnchorColumn = overlay.AnchorCell.ColumnIndex
+			}
+		}
+		entries = append(entries, entry)
+	}
+
+	return entries
+}
+
 func (r *registry) sheetsInfo(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	spreadsheetID, err := requiredString(req, "spreadsheet_id")
 	if err != nil {
@@ -222,13 +264,16 @@ func (r *registry) sheetsInfo(ctx context.Context, req mcp.CallToolRequest) (*mc
 		ConditionalFormats int  `json:"conditional_formats,omitempty"`
 		BandedRanges       int  `json:"banded_ranges,omitempty"`
 		ProtectedRanges    int  `json:"protected_ranges,omitempty"`
-		Charts             int  `json:"charts,omitempty"`
 		Slicers            int  `json:"slicers,omitempty"`
 		Tables             int  `json:"tables,omitempty"`
 		FilterViews        int  `json:"filter_views,omitempty"`
 		BasicFilter        bool `json:"basic_filter,omitempty"`
 		RowGroups          int  `json:"row_groups,omitempty"`
 		ColumnGroups       int  `json:"column_groups,omitempty"`
+		// Charts are the exception to the counting: each is named by the number that puts
+		// it on a slide or changes it, and a count left a caller knowing a chart was there
+		// and unable to point at it.
+		Charts []chartEntry `json:"charts,omitempty"`
 	}
 
 	tabs := make([]tab, 0, len(spreadsheet.Sheets))
@@ -242,7 +287,7 @@ func (r *registry) sheetsInfo(ctx context.Context, req mcp.CallToolRequest) (*mc
 			ConditionalFormats: len(sheet.ConditionalFormats),
 			BandedRanges:       len(sheet.BandedRanges),
 			ProtectedRanges:    len(sheet.ProtectedRanges),
-			Charts:             len(sheet.Charts),
+			Charts:             chartsOf(sheet.Charts),
 			Slicers:            len(sheet.Slicers),
 			Tables:             len(sheet.Tables),
 			FilterViews:        len(sheet.FilterViews),

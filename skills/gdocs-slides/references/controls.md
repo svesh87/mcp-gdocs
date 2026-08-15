@@ -105,6 +105,57 @@ the frame comes out even instead of showing seams where two cells disagreed.
 | the description a screen reader reads out | `gdocs_slides_set_alt_text` | nothing else writes it |
 | how a connector runs, and rerouting it | `gdocs_slides_route_line` | a connector drawn before its shapes were placed stays where it was drawn until this is called |
 
+## Bringing content in from another document
+
+Slides has no request that copies anything between presentations — `duplicate` works inside
+one deck and nowhere else — so these read the source and build it again in the target. Both
+are in the `slides-copy` group, which the default set offers and `--tools=slides` does not.
+
+| To do | Tool | Notes |
+|---|---|---|
+| a slide from another deck | `gdocs_slides_copy_slide` | content, not theme; the answer names what it could not carry |
+| **another copy of a slide in this deck** | `gdocs_slides_copy_slide` with the same id both sides, or `gdocs_slides_duplicate` | Google duplicates it: exact, loses nothing |
+| one element from another deck | `gdocs_slides_copy_element` | within one deck `gdocs_slides_duplicate` is cheaper and exact |
+| a table from a workbook | read with `gdocs_sheets_read` + `read_format`, write with `create_table_with_text` | |
+| a chart from a workbook | `gdocs_slides_add_sheets_chart` | `chart_id` comes from `gdocs_sheets_info` |
+| a picture from another deck or document | `gdocs_slides_insert_image` with the `content_url` a reading gave | |
+
+**Inside one deck, never rebuild.** A slide multiplied within its own presentation — one copy
+per metric, one per incident — is duplicated by Google itself and comes across whole,
+including everything a rebuild cannot reach: an authored corner radius that `create_shape`
+cannot make, a drawing, a group, a chart's link to its workbook, the speaker notes.
+`gdocs_slides_copy_slide` does this by itself when source and target are the same deck; the
+answer says `"method": "duplicate"`.
+
+Three things decide whether the result is what you wanted when the decks are different.
+
+**The theme does not travel.** There is no request that applies one deck's theme to
+another. Anything the sample left to its layout — which is most of a well-built deck —
+comes out in the target's fonts and colours. A copied slide lands on the target's layout of
+the *same name*, matched by name because the sample's layout identifier means nothing in
+another deck; if there is none, the slide is made blank and the answer says so. When the
+look has to match, start the target as a copy of the sample deck.
+
+**An address for a picture lives about thirty minutes** and is tagged with the account that
+read it. Read and write in one pass. A list of pictures gathered today and rebuilt tomorrow
+is a list of dead addresses.
+
+**Read the `not_carried` list.** These tools do not fail when they cannot carry something;
+they carry the rest and name the loss. A slide reported as copied with two omissions is not
+the same slide. What is never carried: the theme, groups (rebuild the children and call
+`gdocs_slides_group`), and drawings, which the API does not describe at all. A placeholder
+*is* carried when the target's layout has the same slot — the text goes into the real slot
+and inherits its look — and is named as lost when the layout has no such slot, because the
+copy is then an ordinary shape with none of the layout's styling.
+
+```
+gdocs_slides_copy_slide
+  source_presentation_id: 1zm5…       source_page_object_id: p12
+  target_presentation_id: 13bX…       insert_at: 4
+→ {"page_object_id": "SLIDES_API…", "layout": "Заголовок и текст", "elements": 6,
+   "not_carried": ["a group of elements, which has to be rebuilt child by child …"]}
+```
+
 ## Files
 
 | To do | Tool |
@@ -130,4 +181,8 @@ The exports need the server started with `--files-dir`; importing also needs
   as a copy of it.
 - **Send arbitrary API requests.** Every tool builds its own; a caller cannot hand the
   server a batch.
-- **Copy styling from one deck to another in one call.** Read, decide, write.
+- **Carry a look across without carrying the content.** There is no "make this slide look
+  like that one". Content crosses between decks with the copy tools above; a look crosses
+  by starting the target as a copy of the sample, or by reading the sample's numbers and
+  writing them. Building a deck that belongs is still read, decide, write — copying a slide
+  answers a different question, "bring that exact slide here", and answers it exactly.

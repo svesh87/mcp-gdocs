@@ -34,14 +34,16 @@ func narrowedHarness(t *testing.T, fake *fakeGoogle, groups ...Group) *harness {
 	return h
 }
 
-// deckToPruneFrom is two slides, one with a shape on it. Two, because a deck cannot be taken
-// down to nothing and a one-slide fixture would be refused for that reason instead of this
-// one — which would leave the rule under test unproven.
+// deckToPruneFrom is two slides, one with a shape and a table on it. Two slides, because a
+// deck cannot be taken down to nothing and a one-slide fixture would be refused for that
+// reason instead of this one — which would leave the rule under test unproven. The table is
+// there for the smaller-than-an-element case: a row of it goes without any extra group.
 const deckToPruneFrom = `{
   "presentationId": "deck",
   "slides": [
     {"objectId": "slide1", "pageElements": [
-      {"objectId": "shape1", "shape": {"shapeType": "TEXT_BOX"}}]},
+      {"objectId": "shape1", "shape": {"shapeType": "TEXT_BOX"}},
+      {"objectId": "table1", "table": {"rows": 3, "columns": 2}}]},
     {"objectId": "slide2", "pageElements": []}
   ],
   "layouts": [],
@@ -128,14 +130,34 @@ func TestRemovalStopsShortOfAWholePage(t *testing.T) {
 
 // TestRemovingSomethingSmallerNeedsNoExtraGroup: the finer groups are about what disappears,
 // and a shape on a slide disappears whatever they say.
+//
+// A row of a table is here for the same reason, and it is the decision worth pinning: a row
+// stands on a slide the way a shape does, so slides-delete alone reaches it — which is also
+// how the other two families draw the line, a table row in gdocs_docs_delete and rows in
+// gdocs_sheets_delete asking for no extra permission either.
 func TestRemovingSomethingSmallerNeedsNoExtraGroup(t *testing.T) {
-	h := narrowedHarness(t, newFakeGoogle(t).
-		answer(":batchUpdate", emptyBatchReply).
-		answer("/presentations/deck", deckToPruneFrom))
+	for _, probe := range []struct {
+		name     string
+		argument map[string]any
+	}{
+		{name: "a shape", argument: map[string]any{"object_ids": []any{"shape1"}}},
+		{name: "a row of a table", argument: map[string]any{
+			"table_object_id": "table1", "what": "row", "row": 1.0,
+		}},
+	} {
+		t.Run(probe.name, func(t *testing.T) {
+			h := narrowedHarness(t, newFakeGoogle(t).
+				answer(":batchUpdate", emptyBatchReply).
+				answer("/presentations/deck", deckToPruneFrom))
 
-	h.ok(h.registry.slidesDelete(context.Background(), request(map[string]any{
-		"presentation_id": "deck", "object_ids": []any{"shape1"},
-	})))
+			argument := map[string]any{"presentation_id": "deck"}
+			for name, value := range probe.argument {
+				argument[name] = value
+			}
+
+			h.ok(h.registry.slidesDelete(context.Background(), request(argument)))
+		})
+	}
 }
 
 // TestThePageGroupsAreNeverInTheDefaultSet keeps the rule that has held since removal existed

@@ -40,8 +40,10 @@ this is that behaviour in Go, with the rest of the Google editors around it.
 ## Removal stops at the bin
 
 Inside a presentation, a document or a workbook, removal is ordinary editing: a copied
-deck comes down to the slides that apply, and a step that landed wrong leaves a paragraph
-or a table behind that somebody has to be able to take out. A file itself goes no further
+deck comes down to the slides that apply, a step that landed wrong leaves a paragraph
+or a table behind that somebody has to be able to take out, and a row of a table that
+stopped applying comes out where it stands — the alternative is rebuilding the table with
+every width, fill, merge and per-cell style set again. A file itself goes no further
 than the bin, where its owner can find it again for thirty days. Emptying that bin,
 deleting a file outright, and removing a folder or a drive have no code here at all — a
 test checks that, and checks the client behind the tools as well.
@@ -233,7 +235,7 @@ Slides, the content of a deck:
 | `gdocs_slides_create_line` | a line, an arrow or a connector |
 | `gdocs_slides_set_speaker_notes` | replace the notes behind a slide |
 | `gdocs_slides_reorder` | put the slides in a given order |
-| `gdocs_slides_delete` | remove a slide or an element of one, and nothing outside the deck |
+| `gdocs_slides_delete` | remove a slide, an element of one, or a row or column of a table, and nothing outside the deck |
 
 Slides, how it looks:
 
@@ -307,7 +309,7 @@ Sheets, Docs and Drive:
 | `gdocs_docs_replace_image` | swap a picture's content while it keeps its place and size |
 | `gdocs_docs_edit_table` | add a row or column to a table, or take a merge apart |
 | `gdocs_docs_delete` | remove something inside a document: a range, a table row or column, a header, a footer, a floating object, a tab, a named range, the bullets of a list |
-| `gdocs_slides_edit_table` | grow a table on a slide, or take a merge apart |
+| `gdocs_slides_edit_table` | grow a table on a slide, or take a merge apart; a row comes out through `gdocs_slides_delete` |
 | `gdocs_slides_set_table_borders` | the lines of a table, by position across a rectangle |
 | `gdocs_slides_replace_image` | swap a picture's content while it keeps its place and crop |
 | `gdocs_slides_replace_shapes_with_image` | turn every shape whose text matches into a picture |

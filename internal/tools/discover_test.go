@@ -156,6 +156,9 @@ func TestDiscoveryUnderstandsTheWordsOfTheTrade(t *testing.T) {
 		{"цвет заливки ячейки таблицы", "table"},
 		{"заметки докладчика к слайду", "notes"},
 		{"выпадающий список в книге", "dropdown"},
+		// Removal inside a table lives in the family's one removing tool, and an agent asking
+		// for it in Russian has to arrive there rather than at the tool that grows a table.
+		{"удалить строку таблицы на слайде", "slides_delete"},
 	} {
 		found := finder.search(searchWords(probe.about), 5, nil)
 		if len(found) == 0 {

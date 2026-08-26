@@ -235,7 +235,11 @@ per-cell style the original carried, all of which then has to be set again.
 **On the slide:** a table that is the right size and the wrong colour, with the header row no
 longer bold.
 **Instead:** `gdocs_slides_edit_table` adds rows and columns beside a cell and takes merges
-apart. The size a table was created with is not final, and reshaping keeps the styling.
+apart; `gdocs_slides_delete` with `table_object_id` and `what=row` or `what=column` takes them
+back out, `count` of them in one batch. The size a table was created with is not final in
+either direction, and reshaping keeps the styling. Removing a row moves every row under it up,
+so a second removal goes by the count the first one answered with, not by the reading before
+it.
 
 ### Furniture put on the slide instead of the layout
 A band, a logo, a rule, a background: each one added to a slide is one that has to be added

@@ -201,14 +201,31 @@ func (r *registry) registerSlidesLayout(srv *server.MCPServer) {
 	), r.slidesUpdateTableCells)
 
 	srv.AddTool(mcp.NewTool("gdocs_slides_delete",
-		mcp.WithDescription("Remove a slide, or one element of a slide, by identifier. "+
-			"This exists for two jobs and no others: taking a copied deck down to the slides that apply "+
-			"this time, and clearing away a slide a failed step left behind. It reaches nothing outside "+
-			"the presentation — no files, no folders, no spreadsheet tabs, no rows. "+
-			"Name the identifier you read from gdocs_slides_list, never a guess."),
+		mcp.WithDescription("Remove a slide, an element of a slide, or a row or column of a table on one. "+
+			"This exists for three jobs and no others: taking a copied deck down to the slides that apply "+
+			"this time, clearing away what a failed step left behind, and shrinking a table whose shape "+
+			"changed — a row that stopped applying comes out here, and the alternative is rebuilding the "+
+			"table with every width, fill, merge and per-cell style set again. It reaches nothing outside "+
+			"the presentation — no files, no folders, no workbooks. "+
+			"Name either object_ids or a table, never both in one call. "+
+			"Take the identifiers from gdocs_slides_list and the indexes from gdocs_slides_read_table, "+
+			"never a guess: removing a row moves every row under it up, so a second removal needs a "+
+			"fresh reading or the count this call answers with."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
-		mcp.WithArray("object_ids", mcp.Required(), mcp.WithStringItems(), mcp.Description(
+		mcp.WithArray("object_ids", mcp.WithStringItems(), mcp.Description(
 			"Identifiers to remove: slides, or elements on them.")),
+		mcp.WithString("table_object_id", mcp.Description(
+			"Table to take a row or a column out of, instead of removing whole elements.")),
+		mcp.WithString("what", mcp.Description("With a table: row or column.")),
+		mcp.WithNumber("row", mcp.Description(
+			"With what=row, the row to remove, from 0. With what=column, any row of the cell naming it.")),
+		mcp.WithNumber("column", mcp.Description(
+			"With what=column, the column to remove, from 0. With what=row, any column of the cell "+
+				"naming it.")),
+		mcp.WithNumber("count", mcp.DefaultNumber(1), mcp.Description(
+			"How many rows or columns, counting from the one named and going down or right. The API "+
+				"removes one per request, so this is that many requests in one batch: the band goes as a "+
+				"whole or not at all.")),
 		mcp.WithDestructiveHintAnnotation(true),
 	), r.slidesDelete)
 
@@ -273,10 +290,15 @@ func (r *registry) registerSlidesLayout(srv *server.MCPServer) {
 	), r.slidesStyleTable)
 }
 
-// slidesDelete removes slides or elements, and nothing else anywhere.
+// slidesDelete removes slides, elements, or a band of a table, and nothing else anywhere.
 //
 // Every identifier is checked against the presentation first, so a typo is a refusal
 // rather than a deletion of something else, and the answer names what went.
+//
+// One call names one of the two: whole elements by identifier, or a table and the row or
+// column to take out of it. Both in one call is refused rather than resolved in some order,
+// because the order would decide what the indexes mean — removing an element cannot move a
+// row, but a caller who wrote both was thinking of something this tool is not doing.
 func (r *registry) slidesDelete(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	presentationID, err := requiredString(req, "presentation_id")
 	if err != nil {
@@ -284,13 +306,24 @@ func (r *registry) slidesDelete(ctx context.Context, req mcp.CallToolRequest) (*
 	}
 
 	objectIDs := req.GetStringSlice("object_ids", nil)
-	if len(objectIDs) == 0 {
-		return toolError(fmt.Errorf("object_ids is empty")), nil
+	tableID := optionalString(req, "table_object_id")
+
+	switch {
+	case len(objectIDs) > 0 && tableID != "":
+		return toolError(fmt.Errorf("this call names both object_ids and a table; make one call each, " +
+			"so what goes is what was meant")), nil
+	case len(objectIDs) == 0 && tableID == "":
+		return toolError(fmt.Errorf("name what to remove: object_ids is empty and no table_object_id " +
+			"was given")), nil
 	}
 
 	client, err := r.client(ctx)
 	if err != nil {
 		return toolError(err), nil
+	}
+
+	if tableID != "" {
+		return r.slidesDeleteTableBand(ctx, client, req, presentationID, tableID)
 	}
 
 	presentation, err := client.Presentation(ctx, presentationID, geometryMask)
@@ -380,6 +413,149 @@ func (r *registry) slidesDelete(ctx context.Context, req mcp.CallToolRequest) (*
 		"removed":         removals,
 		"replies":         len(response.Replies),
 	})
+}
+
+// slidesDeleteTableBand takes a row or a column out of a table that already exists.
+//
+// It reads the deck first for the same reason the rest of the tool does — an identifier
+// that is not there has to be a refusal rather than a request Google decides about — and
+// the read costs nothing extra: geometryMask already carries every table's row and column
+// count, which is exactly what the checks below need.
+//
+// The API has no count field, unlike insertTableRows: one request removes one row. Several
+// requests naming the same cell therefore take a band, because each removal moves what was
+// under it up. That is the whole of why count is spelled out here instead of passed on, and
+// why the band goes in one batch: half a band removed is a table nobody asked for.
+//
+// This needs slides-delete and nothing finer. The finer group is about a whole page, and a
+// row of a table stands on a slide the way a shape does — which is also how the other two
+// families draw the line: a table row in gdocs_docs_delete and rows in gdocs_sheets_delete
+// ask for no extra permission either.
+func (r *registry) slidesDeleteTableBand(ctx context.Context, client *google.Client,
+	req mcp.CallToolRequest, presentationID, tableID string) (*mcp.CallToolResult, error) {
+	// Singular is what this tool's own description says and what gdocs_docs_delete takes;
+	// the plural is what gdocs_sheets_delete takes. An agent holding the wrong one of the
+	// two in mind should not get a refusal for it.
+	asked := optionalString(req, "what")
+	what := strings.TrimSuffix(strings.ToLower(asked), "s")
+	if what != "row" && what != "column" {
+		return toolError(fmt.Errorf("with a table say what to remove: what=row or what=column, got %q",
+			asked)), nil
+	}
+
+	count := req.GetInt("count", 1)
+	if count < 1 {
+		return toolError(fmt.Errorf("count is %d: name at least one %s to remove", count, what)), nil
+	}
+
+	presentation, err := client.Presentation(ctx, presentationID, geometryMask)
+	if err != nil {
+		return toolError(err), nil
+	}
+
+	element := findPageElement(presentation, tableID)
+	if element == nil {
+		return toolError(fmt.Errorf("no element named %s in this presentation: read the identifiers "+
+			"with gdocs_slides_list and pass them exactly", tableID)), nil
+	}
+	if element.Table == nil {
+		return toolError(fmt.Errorf("%s is a %s, not a table; a whole element comes out through "+
+			"object_ids", tableID, elementKind(*element))), nil
+	}
+
+	table := element.Table
+	row := req.GetInt("row", 0)
+	column := req.GetInt("column", 0)
+
+	// Both coordinates are checked, not only the one being removed: what goes into the
+	// request is a cell, and a cell outside the table is a batch Google refuses whole.
+	for _, side := range []struct {
+		name  string
+		index int
+		size  int
+	}{{"row", row, table.Rows}, {"column", column, table.Columns}} {
+		if side.index < 0 || side.index >= side.size {
+			return toolError(fmt.Errorf("%s has %d %ss, numbered 0 to %d, and this call names %s %d: "+
+				"read the table with gdocs_slides_read_table and take the indexes from there",
+				tableID, side.size, side.name, side.size-1, side.name, side.index)), nil
+		}
+	}
+
+	first, size := row, table.Rows
+	if what == "column" {
+		first, size = column, table.Columns
+	}
+
+	if first+count > size {
+		return toolError(fmt.Errorf("%d %ss from %s %d run past the end of a table with %d of them",
+			count, what, what, first, size)), nil
+	}
+	if size-count < 1 {
+		return toolError(fmt.Errorf("that would leave the table without a single %s: keep at least one, "+
+			"or remove the table itself through object_ids", what)), nil
+	}
+
+	requests := make([]google.Request, 0, count)
+	for index := 0; index < count; index++ {
+		// Every request names the same cell on purpose: the band moves up into it as the one
+		// before it goes.
+		cell := &google.CellLocation{RowIndex: row, ColumnIndex: column}
+
+		request := google.Request{}
+		if what == "row" {
+			request.DeleteTableRow = &google.DeleteTableRowRequest{TableObjectID: tableID, CellLocation: cell}
+		} else {
+			request.DeleteTableColumn = &google.DeleteTableColumnRequest{TableObjectID: tableID, CellLocation: cell}
+		}
+		requests = append(requests, request)
+	}
+
+	response, err := client.SlidesBatchUpdate(ctx, presentationID, requests)
+	if err != nil {
+		return toolError(err), nil
+	}
+
+	rowsLeft, columnsLeft := table.Rows, table.Columns
+	if what == "row" {
+		rowsLeft -= count
+	} else {
+		columnsLeft -= count
+	}
+
+	// The shape that is left is in the answer because the indexes under what went have all
+	// moved: a second call built on the reading that preceded this one removes the wrong band.
+	return resultJSON(map[string]any{
+		"presentation_id": presentationID,
+		"table_object_id": tableID,
+		"removed":         "table_" + what,
+		"first":           first,
+		"count":           count,
+		"rows_left":       rowsLeft,
+		"columns_left":    columnsLeft,
+		"replies":         len(response.Replies),
+	})
+}
+
+// findPageElement looks an identifier up among the elements of every page there is — the
+// slides, the layouts and the master — and answers with the element or nothing.
+//
+// Layouts are in the search because a table put on one is part of the template and comes
+// off it the same way it went on, which is how the rest of this tool already treats them.
+func findPageElement(presentation *google.Presentation, objectID string) *google.PageElement {
+	pages := append(append([]google.Page{}, presentation.Slides...), presentation.Layouts...)
+	pages = append(pages, presentation.Masters...)
+
+	for _, page := range pages {
+		for _, element := range page.PageElements {
+			if element.ObjectID == objectID {
+				found := element
+
+				return &found
+			}
+		}
+	}
+
+	return nil
 }
 
 // slidesReorder arranges the deck in the order it was given.

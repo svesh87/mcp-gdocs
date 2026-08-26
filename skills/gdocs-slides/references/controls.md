@@ -88,6 +88,7 @@ shape with one), `gdocs_slides_create_line`, `gdocs_slides_insert_image`,
 | vertical alignment of cell content | `read_table` | `style_table` (`content_alignment`) |
 | the lines of a table | `read_table` | `gdocs_slides_set_table_borders` — by position (ALL, OUTER, INNER, one side), across the whole table or a rectangle |
 | more rows or columns after it exists | `read_table` | `gdocs_slides_edit_table` (`insert_rows`, `insert_columns`) |
+| fewer rows or columns | `read_table` | `gdocs_slides_delete` (`table_object_id`, `what=row`/`column`, `count`) — needs `slides-delete`, and nothing finer |
 | taking a merge apart | `read_table` | `gdocs_slides_edit_table` (`unmerge`) |
 | text, style, list or link **inside one cell** | `inspect_text_structure` with `row`/`column` | `set_text`, `set_text_style`, `reset_text_style`, `set_paragraph_style`, `set_list`, `link_text` — all of them take `row`/`column` |
 | the colour a cell's words are really in | `read_table`: `text_color` (chosen), `theme_color` (from the palette), `text_color_inherited` (the deck's own — take it from `read_theme`) | `style_table` (`cell_styles`), or `set_text_style` with `row`/`column` |
@@ -223,9 +224,10 @@ The exports need the server started with `--files-dir`; importing also needs
 - **Delete a file, a folder or a drive.** A presentation can be put in the bin with
   `gdocs_drive_delete_to_trash`, where its owner finds it again for thirty days, and only
   when the server was started with `drive-delete`. Nothing empties that bin.
-- **Remove a whole slide with `slides-delete` alone.** That group covers elements on a slide;
-  the slide itself needs `slides-delete-page` as well, because a stray shape is a moment's
-  work to put back and a slide is an hour's. The refusal names the missing group.
+- **Remove a whole slide with `slides-delete` alone.** That group covers what stands on a
+  slide — elements, and rows and columns of a table; the slide itself needs
+  `slides-delete-page` as well, because a stray shape is a moment's work to put back and a
+  slide is an hour's. The refusal names the missing group.
 - **Make a new layout or apply another deck's theme.** The API has neither request. What
   it does have: the colour scheme and the existing layouts of a deck can be rewritten
   (`set_theme_colors`, `style_layout`), and a deck that must look like a sample is started

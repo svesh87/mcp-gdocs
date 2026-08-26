@@ -242,6 +242,8 @@ type Request struct {
 	DuplicateObject             *DuplicateObjectRequest             `json:"duplicateObject,omitempty"`
 	InsertTableRows             *InsertTableRowsRequest             `json:"insertTableRows,omitempty"`
 	InsertTableColumns          *InsertTableColumnsRequest          `json:"insertTableColumns,omitempty"`
+	DeleteTableRow              *DeleteTableRowRequest              `json:"deleteTableRow,omitempty"`
+	DeleteTableColumn           *DeleteTableColumnRequest           `json:"deleteTableColumn,omitempty"`
 	UnmergeTableCells           *UnmergeTableCellsRequest           `json:"unmergeTableCells,omitempty"`
 	UpdateTableBorder           *UpdateTableBorderRequest           `json:"updateTableBorderProperties,omitempty"`
 	ReplaceAllText              *ReplaceAllTextRequest              `json:"replaceAllText,omitempty"`
@@ -271,6 +273,22 @@ type InsertTableColumnsRequest struct {
 	CellLocation  *CellLocation `json:"cellLocation,omitempty"`
 	InsertRight   bool          `json:"insertRight"`
 	Number        int           `json:"number,omitempty"`
+}
+
+// DeleteTableRowRequest takes one row out of a table, the row the named cell sits in.
+//
+// There is no count field, unlike the two above: the API removes one row per request. Rows
+// below the one that went move up, so several requests naming the same cell take a band —
+// which is what a caller asking for more than one row is really asking for.
+type DeleteTableRowRequest struct {
+	TableObjectID string        `json:"tableObjectId"`
+	CellLocation  *CellLocation `json:"cellLocation,omitempty"`
+}
+
+// DeleteTableColumnRequest takes one column out of a table, on the same terms.
+type DeleteTableColumnRequest struct {
+	TableObjectID string        `json:"tableObjectId"`
+	CellLocation  *CellLocation `json:"cellLocation,omitempty"`
 }
 
 // UnmergeTableCellsRequest takes a merged rectangle apart again.

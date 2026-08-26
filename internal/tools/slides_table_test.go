@@ -528,6 +528,145 @@ func TestDelete(t *testing.T) {
 	}
 }
 
+// TestDeleteTableBand: a row that stopped applying comes out of a table, and the table keeps
+// its widths, fills, merges and per-cell styling.
+//
+// The alternative the API leaves is removing the table and building it again, which is the
+// operation that loses work — so what this test pins is the request bodies, and the count of
+// them: the API removes one row per request, so a band of two is two requests naming the same
+// cell in one batch.
+func TestDeleteTableBand(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).
+		answer("/presentations/deck:batchUpdate", emptyBatchReply).
+		answer("/presentations/deck", presentationWithFilledTable))
+
+	// The table is three rows by two columns.
+	answer := h.ok(h.registry.slidesDelete(context.Background(), request(map[string]any{
+		"presentation_id": "deck", "table_object_id": "table1", "what": "row",
+		"row": 2.0, "column": 0.0,
+	})))
+
+	for _, want := range []string{`"removed": "table_row"`, `"first": 2`, `"rows_left": 2`, `"columns_left": 2`} {
+		if !strings.Contains(answer, want) {
+			t.Errorf("the answer should carry %s, so the next call is built on it, got %s", want, answer)
+		}
+	}
+
+	checkGolden(t, "delete_table_row.json", h.bodyOf(t, len(h.google.requests)-1))
+
+	// Two rows at once, asked for in the plural gdocs_sheets_delete takes.
+	h.ok(h.registry.slidesDelete(context.Background(), request(map[string]any{
+		"presentation_id": "deck", "table_object_id": "table1", "what": "rows",
+		"row": 0.0, "column": 1.0, "count": 2.0,
+	})))
+
+	checkGolden(t, "delete_table_rows.json", h.bodyOf(t, len(h.google.requests)-1))
+
+	answer = h.ok(h.registry.slidesDelete(context.Background(), request(map[string]any{
+		"presentation_id": "deck", "table_object_id": "table1", "what": "column",
+		"row": 0.0, "column": 1.0,
+	})))
+
+	if !strings.Contains(answer, `"columns_left": 1`) {
+		t.Errorf("a column removed should leave one of the two, got %s", answer)
+	}
+
+	checkGolden(t, "delete_table_column.json", h.bodyOf(t, len(h.google.requests)-1))
+}
+
+// TestDeleteTableBandRefusals walks every way a call can be wrong. All of them are checked
+// here rather than in Google, because a batch Google refuses is a batch whose message says
+// nothing about which of the indexes was the wrong one.
+func TestDeleteTableBandRefusals(t *testing.T) {
+	for _, probe := range []struct {
+		name     string
+		deck     string
+		argument map[string]any
+		refused  string
+	}{
+		{
+			name:     "no side named",
+			argument: map[string]any{"table_object_id": "table1"},
+			refused:  "what=row or what=column",
+		},
+		{
+			name:     "nothing to remove",
+			argument: map[string]any{"table_object_id": "table1", "what": "row", "count": 0.0},
+			refused:  "name at least one row",
+		},
+		{
+			name:     "a row past the last one",
+			argument: map[string]any{"table_object_id": "table1", "what": "row", "row": 3.0},
+			refused:  "gdocs_slides_read_table",
+		},
+		{
+			name:     "a cell in a column that is not there",
+			argument: map[string]any{"table_object_id": "table1", "what": "row", "row": 0.0, "column": 5.0},
+			refused:  "names column 5",
+		},
+		{
+			name: "a band running off the end",
+			argument: map[string]any{
+				"table_object_id": "table1", "what": "row", "row": 2.0, "count": 2.0,
+			},
+			refused: "run past the end",
+		},
+		{
+			// Three of three: the band fits, and what is left is a table with no rows.
+			name: "the last row of all",
+			argument: map[string]any{
+				"table_object_id": "table1", "what": "row", "row": 0.0, "count": 3.0,
+			},
+			refused: "keep at least one",
+		},
+		{
+			name: "two things in one call",
+			argument: map[string]any{
+				"table_object_id": "table1", "what": "row", "object_ids": []any{"table1"},
+			},
+			refused: "one call each",
+		},
+		{
+			name:     "an identifier that is not in the deck",
+			argument: map[string]any{"table_object_id": "table9", "what": "row"},
+			refused:  "table9",
+		},
+		{
+			name:     "an element that is not a table",
+			deck:     deckToPruneFrom,
+			argument: map[string]any{"table_object_id": "shape1", "what": "row"},
+			refused:  "not a table",
+		},
+	} {
+		t.Run(probe.name, func(t *testing.T) {
+			deck := probe.deck
+			if deck == "" {
+				deck = presentationWithFilledTable
+			}
+
+			h := newHarness(t, newFakeGoogle(t).
+				answer("/presentations/deck:batchUpdate", emptyBatchReply).
+				answer("/presentations/deck", deck))
+
+			argument := map[string]any{"presentation_id": "deck"}
+			for name, value := range probe.argument {
+				argument[name] = value
+			}
+
+			message := h.fail(h.registry.slidesDelete(context.Background(), request(argument)))
+			if !strings.Contains(message, probe.refused) {
+				t.Errorf("the refusal should say %q, got %q", probe.refused, message)
+			}
+
+			for _, sent := range h.google.requests {
+				if strings.Contains(sent.Path, ":batchUpdate") {
+					t.Error("a call this wrong should not reach Google at all")
+				}
+			}
+		})
+	}
+}
+
 func TestReorder(t *testing.T) {
 	h := newHarness(t, newFakeGoogle(t).
 		answer("/presentations/deck:batchUpdate", emptyBatchReply).

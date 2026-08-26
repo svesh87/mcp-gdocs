@@ -26,7 +26,9 @@ func (r *registry) registerSlidesExtra(srv *server.MCPServer) {
 
 	srv.AddTool(mcp.NewTool("gdocs_slides_edit_table",
 		mcp.WithDescription("Change a table's shape after it exists: add rows or columns beside a cell, or "+
-			"take a merged rectangle apart. The size a table was created with is not final."),
+			"take a merged rectangle apart. The size a table was created with is not final. "+
+			"This tool only grows a table; a row or a column comes out through gdocs_slides_delete, "+
+			"which is where removal lives whatever it removes."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
 		mcp.WithString("table_object_id", mcp.Required(), mcp.Description("Table to change.")),
 		mcp.WithString("what", mcp.Required(), mcp.Description("insert_rows, insert_columns or unmerge.")),

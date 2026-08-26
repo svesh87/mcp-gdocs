@@ -1,0 +1,13 @@
+{
+  "requests": [
+    {
+      "deleteTableRow": {
+        "tableObjectId": "table1",
+        "cellLocation": {
+          "rowIndex": 2,
+          "columnIndex": 0
+        }
+      }
+    }
+  ]
+}

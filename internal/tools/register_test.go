@@ -52,8 +52,9 @@ func registeredTools(t *testing.T, allowWrite bool) []string {
 //
 // Inside a presentation, a document or a workbook, removal is ordinary editing — a copied
 // deck has to come down to the slides that apply, a step that landed wrong leaves a
-// paragraph or a table behind, and without a way back the only repair is a person in a
-// browser. A file itself goes no further than the bin, which its owner can undo. Emptying
+// paragraph or a table behind, a row of a table stops applying and has to come out, and
+// without a way back the only repair is a person in a browser. A file itself goes no
+// further than the bin, which its owner can undo. Emptying
 // that bin, deleting a file outright, and removing a folder or a drive are absent. A name
 // added here without that being true of it is a name that fails the tests below.
 var deletionTools = []string{

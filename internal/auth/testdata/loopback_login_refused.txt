@@ -1,0 +1,6 @@
+status: Unauthorized
+Cache-Control: 
+Referrer-Policy: 
+Content-Type: text/plain; charset=utf-8
+
+authentication required: open /login?key=<the server's MCP_AUTH_TOKEN>

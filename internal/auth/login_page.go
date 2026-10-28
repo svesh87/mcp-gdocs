@@ -22,8 +22,16 @@ import (
 
 // pageView is what the template renders.
 type pageView struct {
-	Key      string
-	Status   Status
+	// Key is what the form carries back. Empty when the gateway authenticated the request
+	// with a header: then there is no hidden field at all.
+	Key    string
+	Status Status
+	// Public is the route behind a gateway. Action and LoginURL are absolute addresses
+	// built from --public-url, because the path the browser sees is not the path this
+	// server is mounted at.
+	Public   bool
+	Action   string
+	LoginURL string
 	Scopes   []string
 	Redirect string
 	Error    string
@@ -115,11 +123,14 @@ ul { margin: .3rem 0; padding-left: 1.2rem; }
 </div>
 
 {{ if .Error }}<div class="box bad">{{ .Error }}</div>{{ end }}
-{{ if .Done }}<div class="box good">Вход выполнен, токен сохранён. Вкладку можно закрыть.</div>{{ end }}
+{{ if .Done }}<div class="box good">Вход выполнен, токен сохранён. Вкладку можно закрыть.</div>{{ end }}{{ if and .LoginURL (not .Redirect) }}
+<p><a href="{{ .LoginURL }}">К странице входа</a></p>{{ end }}
 
 {{ if .Redirect }}
-<form method="post" autocomplete="off">
+<form method="post" autocomplete="off"{{ if .Action }} action="{{ .Action }}"{{ end }}>
+{{- if .Key }}
   <input type="hidden" name="key" value="{{ .Key }}">
+{{- end }}
   <button type="submit">{{ if .Status.SignedIn }}Войти заново{{ else }}Войти через Google{{ end }}</button>
 </form>
 
@@ -128,10 +139,17 @@ ul { margin: .3rem 0; padding-left: 1.2rem; }
 </p>
 <ul>{{ range .Scopes }}<li><code>{{ . }}</code></li>{{ end }}</ul>
 
+{{ if .Public -}}
+<p class="lead">
+  Google вернёт браузер на <code>{{ .Redirect }}</code> — этот адрес записан в OAuth-клиенте
+  в Google Cloud Console, и токен один на все окна сервера.
+</p>
+{{ else -}}
 <p class="lead">
   Google вернёт браузер на <code>{{ .Redirect }}</code> — это тот же порт, на котором открыта
   эта страница, поэтому код авторизации не покидает машину.
 </p>
+{{ end -}}
 {{ end }}
 </body>
 </html>

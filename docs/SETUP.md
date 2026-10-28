@@ -101,7 +101,10 @@ This is the decision that makes the rest simple. With Internal:
 **External** is the fallback if the account is a personal `@gmail.com` one rather than a
 Workspace account. It works, with two differences: every account that signs in has to be
 added under **Audience → Test users**, and the consent screen carries the unverified-app
-warning. For a server one person runs for themselves, that is tolerable.
+warning. For a server one person runs for themselves, that is tolerable. One more thing
+to know: while an External app's publishing status is *Testing*, Google issues refresh
+tokens that expire after seven days, so the server needs a new sign-in every week until
+the app is published. An Internal app has no such status.
 
 ## 5. An OAuth client of type Desktop
 
@@ -150,6 +153,33 @@ That is the shape a password store hands over, and it leaves nothing about the
 application on disk. Take the two values out of the downloaded file, put them wherever
 secrets live, and delete the file. If both a file and the variables are present, the
 variables win.
+
+### Behind a gateway: a client of type Web application
+
+Only for a server started with `--public-url` (see the README, *Behind a gateway*). There
+Google returns the browser to `<public-url>/callback` — a fixed, routable address, which a
+Desktop client cannot use and a Web application client must have registered beforehand.
+It is a second client in the **same project**: branding, audience and scopes are the
+project's, and the Desktop client others use stays as it is.
+
+**Google Auth Platform → Clients → Create client**
+([direct link](https://console.cloud.google.com/auth/clients))
+
+| Field | Value |
+|---|---|
+| **Application type** | **Web application** |
+| **Name** | anything, e.g. `mcp-gdocs gateway`. Console-only |
+| **Authorised JavaScript origins** | leave empty — nothing here runs in a browser against Google |
+| **Authorised redirect URIs** | **Add URI** → `<public-url>/callback`, e.g. `https://mcp.example.com/gdocs/callback`. Character for character: scheme, host, path, no trailing slash |
+
+Then **Create**. The identifier and the secret are shown in the dialog that follows, with
+a **Download JSON** button; the file has a `web` section instead of `installed`, which
+`--credentials` reads the same way. Or put the two values into `GOOGLE_OAUTH_CLIENT_ID`
+and `GOOGLE_OAUTH_CLIENT_SECRET` as above. Take them at once: the console may not show the
+secret again later (if it does not, *Add secret* on the client makes a new one).
+
+A refresh token belongs to the client that issued it, so a token directory signed in
+through the Desktop client has to be signed in again once the server runs with the Web one.
 
 ## 6. Scopes
 
@@ -225,6 +255,11 @@ ssh -L 8819:127.0.0.1:8819 <host>
 # then open http://127.0.0.1:8819/login?key=… in the local browser
 ```
 
+**If the server sits behind a gateway** with `--public-url`, open `<public-url>/login` — no
+key: the gateway adds the bearer header, and the page then repeats the token nowhere. The
+same button goes to Google, Google returns to `<public-url>/callback`, and the token lands
+in the same `token.json`. The client has to be the Web application one from step 5.
+
 ## 8. Where the two files live
 
 They are separate on purpose, and only one of them is a person's own:
@@ -274,7 +309,7 @@ requires an account in the organisation.
 |---|---|
 | `no Google token yet` | nobody has signed in: run `login`, or open `/login?key=…` |
 | `invalid_grant` when refreshing | consent was revoked, or the token was replaced. Sign in again |
-| `redirect_uri_mismatch` | the client is not of type Desktop, or the sign-in was opened on something other than a loopback address |
+| `redirect_uri_mismatch` | the client is not of type Desktop, or the sign-in was opened on something other than a loopback address. With `--public-url`: the Web application client does not list exactly `<public-url>/callback`, or the server runs with the Desktop client |
 | `403` naming an API | that API is not enabled in the project (step 2) |
 | `403 PERMISSION_DENIED` on a file | the signed-in person cannot reach it — usually a shared drive they were never added to |
 | `access_denied` on the consent screen | Internal audience and an account outside the organisation |

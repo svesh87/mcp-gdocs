@@ -5,6 +5,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -86,6 +87,10 @@ type Config struct {
 	// Empty means the default set. It is kept as text here and turned into groups by the
 	// tools package, which owns the names.
 	Tools string
+	// PublicURL is the absolute external address of the server behind a gateway, without
+	// a trailing slash, e.g. https://mcp.example.com/gdocs. Empty means the loopback
+	// sign-in, exactly as before the flag existed.
+	PublicURL string
 }
 
 // Flags are the command line values Load needs. Kept apart from parsing so a test can
@@ -99,6 +104,7 @@ type Flags struct {
 	AllowWrite  bool
 	FilesDir    string
 	Tools       string
+	PublicURL   string
 }
 
 // Env reads a variable. Tests substitute a map instead of the process environment.
@@ -164,7 +170,42 @@ func Load(flags Flags, env Env) (*Config, error) {
 		return nil, err
 	}
 
+	publicURL, err := ParsePublicURL(flags.PublicURL)
+	if err != nil {
+		return nil, err
+	}
+	if publicURL != "" && cfg.Transport != TransportHTTP {
+		return nil, fmt.Errorf("--public-url only applies with --transport=%s: it is the address of "+
+			"the server's sign-in page behind a gateway", TransportHTTP)
+	}
+	cfg.PublicURL = publicURL
+
 	return cfg, nil
+}
+
+// ParsePublicURL validates --public-url and returns it without a trailing slash. Empty
+// stays empty.
+//
+// It has to be absolute: every link, form and redirect of the sign-in is built from it,
+// and Google compares the redirect it gets against the one registered in the console
+// character for character. A query or a fragment would end up in the middle of those
+// addresses, so they are refused rather than mangled.
+func ParsePublicURL(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+
+	parsed, err := url.Parse(raw)
+	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" {
+		return "", fmt.Errorf("--public-url %q must be an absolute http(s) address, "+
+			"e.g. https://mcp.example.com/gdocs", raw)
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" || parsed.User != nil {
+		return "", fmt.Errorf("--public-url %q must have no query, fragment or credentials", raw)
+	}
+
+	return strings.TrimRight(raw, "/"), nil
 }
 
 // loadClient decides where the OAuth client comes from.

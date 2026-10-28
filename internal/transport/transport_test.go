@@ -150,6 +150,38 @@ func TestHandlerRoutes(t *testing.T) {
 	}
 }
 
+// The public sign-in mounts an exact-root pattern beside the MCP windows. It must answer
+// the root only, and leave health and the windows exactly as they were.
+func TestExactRootBesideTheWindows(t *testing.T) {
+	pages := map[string]http.Handler{
+		"/{$}": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "https://mcp.example.com/gdocs/login", http.StatusFound)
+		}),
+	}
+
+	handler := NewHandler(map[string]*server.MCPServer{
+		MCPPath:             server.NewMCPServer("test", "0.0.0"),
+		MCPPath + "/slides": server.NewMCPServer("test", "0.0.0"),
+	}, nil, "secret", pages)
+
+	for _, probe := range []struct {
+		method, path string
+		status       int
+	}{
+		{http.MethodGet, "/", http.StatusFound},
+		{http.MethodGet, "/unknown", http.StatusNotFound},
+		{http.MethodGet, HealthPath, http.StatusOK},
+		{http.MethodPost, MCPPath, http.StatusUnauthorized},
+		{http.MethodPost, MCPPath + "/slides", http.StatusUnauthorized},
+	} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(probe.method, probe.path, strings.NewReader("{}")))
+		if recorder.Code != probe.status {
+			t.Errorf("%s %s = %d, want %d", probe.method, probe.path, recorder.Code, probe.status)
+		}
+	}
+}
+
 // TestSessionKeepsItsServer covers the trap that made discovery look broken: a client opens
 // its listening stream at the same path without the query parameter, that stream lands on the
 // full server, and the notification saying the tool list grew is never sent anywhere.

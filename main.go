@@ -87,6 +87,10 @@ func parseFlags(name string, args []string) (config.Flags, bool, error) {
 				"Also read from "+config.EnvTools)
 		filesDir = set.String("files-dir", "",
 			"directory exports may be written to and imports read from; empty means no file access at all")
+		publicURL = set.String("public-url", "",
+			"absolute external address of the server behind a gateway, e.g. https://mcp.example.com/gdocs; "+
+				"the sign-in then uses a Web application client returning to <public-url>/callback. "+
+				"Empty means the loopback sign-in")
 		showVersion = set.Bool("version", false, "print the version and exit")
 	)
 
@@ -108,6 +112,7 @@ func parseFlags(name string, args []string) (config.Flags, bool, error) {
 		AllowWrite:  *allowWrite,
 		FilesDir:    *filesDir,
 		Tools:       *toolGroups,
+		PublicURL:   *publicURL,
 	}, false, nil
 }
 
@@ -130,7 +135,12 @@ func serve(cfg *config.Config) error {
 	// The server starts whether or not anybody has signed in. That is deliberate: in a
 	// container the sign-in happens through this very server's /login page, so refusing
 	// to start without a token would make signing in impossible.
-	provider := &lazyClients{authenticator: authenticator}
+	pages, err := newWebLogin(cfg, authenticator)
+	if err != nil {
+		return err
+	}
+
+	provider := &lazyClients{authenticator: authenticator, loginURL: pages.LoginURL()}
 
 	mcpServer, err := newToolServer(cfg, provider, groups)
 	if err != nil {
@@ -177,8 +187,11 @@ func serve(cfg *config.Config) error {
 			discovery[path] = narrow
 		}
 
-		pages := auth.NewWebLogin(authenticator, cfg.AuthToken).Handlers()
-		return transport.ServeHTTP(servers, discovery, cfg.Address, cfg.AuthToken, pages)
+		if address := pages.LoginURL(); address != "" {
+			fmt.Fprintln(os.Stderr, "mcp-gdocs: sign in at "+address)
+		}
+
+		return transport.ServeHTTP(servers, discovery, cfg.Address, cfg.AuthToken, pages.Handlers())
 	}
 
 	served := make(chan error, 1)
@@ -211,11 +224,27 @@ func newToolServer(cfg *config.Config, provider tools.Clients, groups map[tools.
 	return mcpServer, nil
 }
 
+// newWebLogin builds the sign-in pages: the loopback route by default, the public one when
+// --public-url names the address a gateway serves this server at.
+func newWebLogin(cfg *config.Config, authenticator *auth.Authenticator) (*auth.WebLogin, error) {
+	if cfg.PublicURL == "" {
+		return auth.NewWebLogin(authenticator, cfg.AuthToken), nil
+	}
+	return auth.NewPublicWebLogin(authenticator, cfg.AuthToken, cfg.PublicURL)
+}
+
 // login signs in from a machine that has a browser.
 func login(args []string) error {
 	flags, showVersion, err := parseFlags("mcp-gdocs login", args)
 	if err != nil || showVersion {
 		return err
+	}
+
+	// The command signs in through a loopback port, which only a Desktop client accepts.
+	// A server with a public address signs in on its own page instead.
+	if flags.PublicURL != "" {
+		return errors.New("the login command signs in through loopback and takes no --public-url: " +
+			"open <public-url>/login on the running server instead")
 	}
 
 	// The login command needs no port of its own and no bearer token, so the transport
@@ -277,6 +306,9 @@ func clientCredentials(cfg *config.Config) (auth.Credentials, error) {
 // remembered.
 type lazyClients struct {
 	authenticator *auth.Authenticator
+	// loginURL is the public sign-in address, when the server has one: a tool called
+	// before anybody signed in then names it instead of the loopback advice.
+	loginURL string
 
 	mu     sync.Mutex
 	client *google.Client
@@ -294,6 +326,9 @@ func (l *lazyClients) Google(ctx context.Context) (*google.Client, error) {
 	httpClient, err := l.authenticator.HTTPClient(ctx)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoToken) {
+			if l.loginURL != "" {
+				return nil, auth.NoTokenAt(l.loginURL)
+			}
 			return nil, err
 		}
 		return nil, fmt.Errorf("reaching Google: %w", err)

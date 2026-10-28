@@ -397,6 +397,40 @@ screen.
 For a server on another machine, tunnel the port rather than exposing it — Google only
 redirects to loopback: `ssh -L 8819:127.0.0.1:8819 <host>`.
 
+### Behind a gateway
+
+`--public-url` is for a server that a reverse proxy publishes under an address of its
+own — for example `https://mcp.example.com/gdocs`, with the proxy stripping `/gdocs`,
+putting its own access check in front, and **adding** `Authorization: Bearer
+<MCP_AUTH_TOKEN>` to every request. Without the flag nothing changes: the loopback sign-in
+above, the `login` command and the token file are exactly what they were.
+
+With it:
+
+- the sign-in page is `<public-url>/login`, with no `?key=`; `GET /` redirects there, and
+  the server prints that address on start;
+- the page is opened by the gateway's header, and then the token appears nowhere in it —
+  no hidden field, no address. `?key=` still opens it for whoever reaches the server
+  directly, and then the form carries the key back as before;
+- Google returns the browser to `<public-url>/callback`, which this server handles. That
+  address has to be registered in advance, so the OAuth client is of type **Web
+  application** rather than Desktop — see [docs/SETUP.md](docs/SETUP.md#behind-a-gateway-a-client-of-type-web-application);
+- state, PKCE, offline access and the forced consent screen are the same as on loopback,
+  and the token lands in the same `token.json` in `--token-dir`. One sign-in serves `/mcp`
+  and every family window;
+- a form submitted from another site is refused (`Origin` must be the public address),
+  because the gateway adds the bearer to whatever the browser sends;
+- `/healthz` and `/mcp/*` are untouched, and the pages keep `no-store` and `no-referrer`.
+
+```bash
+mcp-gdocs --transport=streamable-http --address=0.0.0.0:8819 --token-dir=/tokens \
+  --public-url=https://mcp.example.com/gdocs --allow-write
+```
+
+The `login` command refuses `--public-url`: it signs in through loopback, which a Web
+application client does not accept. A refresh token belongs to the client that issued it,
+so switching a token directory from a Desktop client to a Web one means signing in again.
+
 ## Running
 
 ```bash
@@ -411,6 +445,7 @@ mcp-gdocs --credentials /config/gcp-oauth.keys.json --token-dir /config/tokens -
 | `--token-dir` | directory the token lives in. Required |
 | `--scopes` | scopes to ask for, comma separated. Empty means `drive`, `spreadsheets`, `presentations`, `documents` |
 | `--allow-write` | register the tools that change documents. Off by default |
+| `--public-url` | absolute external address behind a gateway, e.g. `https://mcp.example.com/gdocs`. Empty (default) means the loopback sign-in. Only with `streamable-http`; see [Behind a gateway](#behind-a-gateway) |
 | `--version` | print the version and exit |
 
 Three environment variables, because a secret in a flag shows up in a process list:

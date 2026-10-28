@@ -1,0 +1,9 @@
+status: See Other
+to: https://accounts.google.com/o/oauth2/auth
+access_type=offline
+client_id=id
+code_challenge_method=S256
+prompt=consent
+redirect_uri=http://127.0.0.1:8819/oauth2callback
+response_type=code
+scope=https://www.googleapis.com/auth/drive

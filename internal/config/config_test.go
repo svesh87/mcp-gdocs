@@ -147,6 +147,59 @@ func TestUnknownTransport(t *testing.T) {
 	}
 }
 
+// Without --public-url nothing changes: the field stays empty and the loopback sign-in is
+// what the server serves.
+func TestPublicURLIsOptIn(t *testing.T) {
+	flags := validFlags()
+	flags.Transport = TransportHTTP
+	flags.Address = "127.0.0.1:8819"
+
+	cfg, err := Load(flags, env(map[string]string{EnvAuthToken: "t"}))
+	if err != nil || cfg.PublicURL != "" {
+		t.Fatalf("no flag means no public address, got %q %v", cfg.PublicURL, err)
+	}
+
+	flags.PublicURL = " https://mcp.example.com/gdocs/ "
+	cfg, err = Load(flags, env(map[string]string{EnvAuthToken: "t"}))
+	if err != nil || cfg.PublicURL != "https://mcp.example.com/gdocs" {
+		t.Fatalf("the public address should lose its trailing slash, got %q %v", cfg.PublicURL, err)
+	}
+
+	// The address belongs to the HTTP sign-in page; on stdio there is no page.
+	stdio := validFlags()
+	stdio.PublicURL = "https://mcp.example.com/gdocs"
+	if _, err := Load(stdio, env(nil)); err == nil || !strings.Contains(err.Error(), "--public-url") {
+		t.Errorf("--public-url on stdio should be refused, got %v", err)
+	}
+}
+
+func TestParsePublicURL(t *testing.T) {
+	for _, bad := range []string{
+		"/gdocs",
+		"mcp.example.com/gdocs",
+		"ftp://mcp.example.com/gdocs",
+		"https://mcp.example.com/gdocs?key=x",
+		"https://mcp.example.com/gdocs#top",
+		"https://user:pass@mcp.example.com/gdocs",
+	} {
+		if _, err := ParsePublicURL(bad); err == nil {
+			t.Errorf("ParsePublicURL(%q) should be refused", bad)
+		}
+	}
+
+	for raw, want := range map[string]string{
+		"":                               "",
+		"https://mcp.example.com/gdocs":  "https://mcp.example.com/gdocs",
+		"https://mcp.example.com/gdocs/": "https://mcp.example.com/gdocs",
+		"http://127.0.0.1:8080":          "http://127.0.0.1:8080",
+	} {
+		got, err := ParsePublicURL(raw)
+		if err != nil || got != want {
+			t.Errorf("ParsePublicURL(%q) = %q, %v; want %q", raw, got, err, want)
+		}
+	}
+}
+
 func TestParseScopes(t *testing.T) {
 	scopes, err := ParseScopes("presentations, drive , presentations")
 	if err != nil {

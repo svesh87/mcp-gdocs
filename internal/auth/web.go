@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
@@ -28,9 +30,20 @@ const pendingTTL = 15 * time.Minute
 // before it offers to change that, and the trip to Google happens on a form submission
 // rather than on opening a link. A link that walks straight into a consent screen is a
 // link somebody can send to somebody else.
+//
+// With a public address (--public-url) the same pages serve a different route: the server
+// sits behind a gateway that terminates TLS, checks who the person is and adds the bearer
+// header itself, and Google returns the browser to <public-url>/callback — an address a
+// client of type Web application has registered in advance. Without one, nothing about the
+// loopback route changes.
 type WebLogin struct {
 	auth   *Authenticator
 	bearer string
+
+	// publicURL is the external base address without a trailing slash, and publicOrigin
+	// its scheme and host. Both empty in the loopback route.
+	publicURL    string
+	publicOrigin string
 
 	mu      sync.Mutex
 	pending map[string]*pendingFlow
@@ -41,17 +54,118 @@ type pendingFlow struct {
 	started time.Time
 }
 
+// PublicCallbackPath is where Google returns the browser in the public route. It is not
+// CallbackPath on purpose: a Web application client has its redirect registered in the
+// console by hand, and the address written there is <public-url>/callback.
+const PublicCallbackPath = "/callback"
+
+// RootPattern is the exact root of the public route, in http.ServeMux syntax.
+const RootPattern = "/{$}"
+
 // NewWebLogin wires the sign-in pages to the server's own bearer token.
 func NewWebLogin(a *Authenticator, bearer string) *WebLogin {
 	return &WebLogin{auth: a, bearer: bearer, pending: map[string]*pendingFlow{}}
 }
 
+// NewPublicWebLogin wires the sign-in pages for a server reached at publicURL through a
+// gateway. publicURL is absolute, e.g. https://mcp.example.com/gdocs.
+func NewPublicWebLogin(a *Authenticator, bearer, publicURL string) (*WebLogin, error) {
+	base := strings.TrimRight(publicURL, "/")
+
+	parsed, err := url.Parse(base)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return nil, fmt.Errorf("the public URL %q is not an absolute address", publicURL)
+	}
+
+	l := NewWebLogin(a, bearer)
+	l.publicURL = base
+	l.publicOrigin = parsed.Scheme + "://" + parsed.Host
+
+	return l, nil
+}
+
+// LoginURL is the address a person opens to sign in, when the server has a public one.
+// It never carries the key: behind the gateway the bearer travels in a header the gateway
+// adds. Empty in the loopback route, where the address depends on the published port.
+func (l *WebLogin) LoginURL() string {
+	if l.publicURL == "" {
+		return ""
+	}
+	return l.publicURL + LoginPath
+}
+
 // Handlers are the pages to mount beside the MCP endpoint.
 func (l *WebLogin) Handlers() map[string]http.Handler {
-	return map[string]http.Handler{
-		LoginPath:    http.HandlerFunc(l.login),
-		CallbackPath: http.HandlerFunc(l.finish),
+	if l.publicURL == "" {
+		return map[string]http.Handler{
+			LoginPath:    http.HandlerFunc(l.login),
+			CallbackPath: http.HandlerFunc(l.finish),
+		}
 	}
+
+	return map[string]http.Handler{
+		LoginPath:          http.HandlerFunc(l.login),
+		PublicCallbackPath: http.HandlerFunc(l.finish),
+		// The bare address of the route is where a person lands by typing it; the page
+		// they want is the sign-in.
+		RootPattern: http.HandlerFunc(l.root),
+	}
+}
+
+// root sends the bare public address to the sign-in page.
+func (l *WebLogin) root(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	http.Redirect(w, r, l.LoginURL(), http.StatusFound)
+}
+
+// authenticate says whether the request carries the server's token, and whether it came
+// in the Authorization header — in which case the page must not repeat it anywhere.
+//
+// The header is accepted only in the public route, where the gateway adds it. The loopback
+// route keeps answering exactly as it always did: the key in the query or in the form.
+func (l *WebLogin) authenticate(r *http.Request) (viaHeader, ok bool) {
+	if l.publicURL != "" {
+		if presented, found := bearerFromHeader(r.Header.Get("Authorization")); found &&
+			subtle.ConstantTimeCompare([]byte(presented), []byte(l.bearer)) == 1 {
+			return true, true
+		}
+	}
+
+	return false, subtle.ConstantTimeCompare([]byte(pageKey(r)), []byte(l.bearer)) == 1
+}
+
+// redirectFor is where Google sends the browser back to for this request.
+func (l *WebLogin) redirectFor(r *http.Request) (string, error) {
+	if l.publicURL != "" {
+		return l.publicURL + PublicCallbackPath, nil
+	}
+	return loopbackRedirect(r)
+}
+
+// view starts a page with what every page of this route carries. key is what the form
+// carries back, and is empty when the request was authenticated by its header.
+func (l *WebLogin) view(key string) pageView {
+	v := pageView{Key: key, Status: l.auth.Store().Status(time.Now())}
+	if l.publicURL != "" {
+		v.Public = true
+		v.Action = l.LoginURL()
+		v.LoginURL = l.LoginURL()
+	}
+	return v
+}
+
+// crossSite says whether a form submission came from a page other than this server's own.
+// Only the public route asks: there the gateway adds the bearer to whatever the browser
+// sends, so a form on someone else's site would otherwise be enough to start a sign-in.
+func (l *WebLogin) crossSite(r *http.Request) bool {
+	if l.publicURL == "" {
+		return false
+	}
+	origin := r.Header.Get("Origin")
+	return origin != "" && origin != l.publicOrigin
 }
 
 // login shows the state of the sign-in, and on a submission sends the browser to Google.
@@ -67,35 +181,54 @@ func (l *WebLogin) login(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if subtle.ConstantTimeCompare([]byte(pageKey(r)), []byte(l.bearer)) != 1 {
+	viaHeader, ok := l.authenticate(r)
+	if !ok {
 		// No key, no page: whoever knocked without it gets nothing to look at and
 		// nothing to click.
-		http.Error(w, "authentication required: open /login?key=<the server's MCP_AUTH_TOKEN>",
-			http.StatusUnauthorized)
+		message := "authentication required: open /login?key=<the server's MCP_AUTH_TOKEN>"
+		if l.publicURL != "" {
+			message = "authentication required: open " + l.LoginURL() +
+				" through the gateway, which adds the server's bearer token"
+		}
+		http.Error(w, message, http.StatusUnauthorized)
 		return
 	}
 
 	noStore(w)
 
-	redirect, err := loopbackRedirect(r)
+	// A request the gateway authenticated carries the token in a header, and the page
+	// gives it nothing to repeat: no hidden field, no address with the key in it.
+	key := l.bearer
+	if viaHeader {
+		key = ""
+	}
+
+	if r.Method == http.MethodPost && l.crossSite(r) {
+		http.Error(w, "the sign-in form was submitted from another site", http.StatusForbidden)
+		return
+	}
+
+	redirect, err := l.redirectFor(r)
 	if err != nil {
-		l.render(w, pageView{Key: l.bearer, Status: l.auth.Store().Status(time.Now()), Error: err.Error()})
+		view := l.view(key)
+		view.Error = err.Error()
+		l.render(w, view)
 		return
 	}
 
 	switch r.Method {
 	case http.MethodGet:
-		l.render(w, pageView{
-			Key:      l.bearer,
-			Status:   l.auth.Store().Status(time.Now()),
-			Scopes:   l.auth.Scopes(),
-			Redirect: redirect,
-		})
+		view := l.view(key)
+		view.Scopes = l.auth.Scopes()
+		view.Redirect = redirect
+		l.render(w, view)
 
 	case http.MethodPost:
 		flow, err := NewFlow(l.auth.Config(redirect))
 		if err != nil {
-			l.render(w, pageView{Key: l.bearer, Status: l.auth.Store().Status(time.Now()), Error: err.Error()})
+			view := l.view(key)
+			view.Error = err.Error()
+			l.render(w, view)
 			return
 		}
 
@@ -116,17 +249,27 @@ func (l *WebLogin) login(w http.ResponseWriter, r *http.Request) {
 // There is no bearer check here: the browser arrives from Google, which knows nothing
 // about this server's token. What guards this path is the state — 32 random bytes handed
 // out by the page, single use, and useless without the PKCE verifier held beside it.
+//
+// In the public route the browser comes back through the gateway, which adds the bearer
+// header as on any other request. The check stays the state all the same: the callback is
+// guarded by the same thing in both routes, and the pages it renders carry no form, so
+// there is nothing for a key to be repeated in.
 func (l *WebLogin) finish(w http.ResponseWriter, r *http.Request) {
 	noStore(w)
 
 	query := r.URL.Query()
 
+	// The key goes into the view only in the loopback route, where it always did; none of
+	// the pages below renders it.
+	key := l.bearer
+	if l.publicURL != "" {
+		key = ""
+	}
+
 	if reason := query.Get("error"); reason != "" {
-		l.render(w, pageView{
-			Key:    l.bearer,
-			Status: l.auth.Store().Status(time.Now()),
-			Error:  "Google отказал: " + reason,
-		})
+		view := l.view(key)
+		view.Error = "Google отказал: " + reason
+		l.render(w, view)
 		return
 	}
 
@@ -139,11 +282,9 @@ func (l *WebLogin) finish(w http.ResponseWriter, r *http.Request) {
 	l.mu.Unlock()
 
 	if !ok {
-		l.render(w, pageView{
-			Key:    l.bearer,
-			Status: l.auth.Store().Status(time.Now()),
-			Error:  "Этот вход неизвестен или устарел — начните заново",
-		})
+		view := l.view(key)
+		view.Error = "Этот вход неизвестен или устарел — начните заново"
+		l.render(w, view)
 		return
 	}
 
@@ -152,21 +293,23 @@ func (l *WebLogin) finish(w http.ResponseWriter, r *http.Request) {
 
 	token, err := entry.flow.Exchange(ctx, state, query.Get("code"))
 	if err != nil {
-		l.render(w, pageView{Key: l.bearer, Status: l.auth.Store().Status(time.Now()), Error: err.Error()})
+		view := l.view(key)
+		view.Error = err.Error()
+		l.render(w, view)
 		return
 	}
 
 	if err := l.auth.Store().Save(token, l.auth.Scopes()); err != nil {
-		l.render(w, pageView{Key: l.bearer, Status: l.auth.Store().Status(time.Now()), Error: err.Error()})
+		view := l.view(key)
+		view.Error = err.Error()
+		l.render(w, view)
 		return
 	}
 
-	l.render(w, pageView{
-		Key:    l.bearer,
-		Status: l.auth.Store().Status(time.Now()),
-		Scopes: l.auth.Scopes(),
-		Done:   true,
-	})
+	view := l.view(key)
+	view.Scopes = l.auth.Scopes()
+	view.Done = true
+	l.render(w, view)
 }
 
 // forgetExpiredLocked drops sign-ins nobody finished. Callers hold the mutex.
@@ -185,6 +328,21 @@ func pageKey(r *http.Request) string {
 		return key
 	}
 	return r.PostFormValue("key")
+}
+
+// bearerFromHeader pulls the token out of an Authorization header value, matching the
+// scheme case-insensitively. The transport package has the same rule for /mcp; it is
+// repeated here rather than imported so the sign-in does not depend on the MCP transport.
+func bearerFromHeader(header string) (string, bool) {
+	const scheme = "bearer "
+
+	if len(header) <= len(scheme) || !strings.EqualFold(header[:len(scheme)], scheme) {
+		return "", false
+	}
+
+	token := strings.TrimSpace(header[len(scheme):])
+
+	return token, token != ""
 }
 
 // noStore keeps the key out of caches and out of the address the browser passes on to

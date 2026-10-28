@@ -1,0 +1,67 @@
+status: OK
+Cache-Control: no-store
+Referrer-Policy: no-referrer
+Content-Type: text/html; charset=utf-8
+
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Вход в Google · mcp-gdocs</title>
+<style>
+:root { color-scheme: light dark; }
+body {
+  font: 16px/1.5 system-ui, sans-serif;
+  max-width: 34rem; margin: 3rem auto; padding: 0 1rem;
+}
+h1 { font-size: 1.3rem; margin-bottom: .3rem; }
+p.lead { color: GrayText; margin-top: 0; }
+form { margin: 1.5rem 0; }
+button {
+  font: inherit; padding: .6rem 1rem; border: 0; border-radius: .4rem;
+  background: Highlight; color: HighlightText; cursor: pointer;
+}
+.box { border: 1px solid GrayText; border-radius: .5rem; padding: .8rem 1rem; margin: 1rem 0; }
+.bad { border-color: #c0392b; }
+.good { border-color: #2e7d32; }
+code { font-size: .9em; overflow-wrap: anywhere; }
+ul { margin: .3rem 0; padding-left: 1.2rem; }
+</style>
+</head>
+<body>
+<h1>Вход в Google</h1>
+<p class="lead">
+  Сервер работает от имени того, кто здесь вошёл. Пароль он не видит и не хранит: браузер
+  уходит на страницу согласия Google, а обратно возвращается только разрешение, из которого
+  сервер делает токен.
+</p>
+
+<div class="box">
+  <div>входа ещё не было</div>
+  <div><code>TOKEN_PATH</code></div>
+  
+</div>
+
+
+
+
+
+<form method="post" autocomplete="off">
+  <input type="hidden" name="key" value="bearer-token">
+  <button type="submit">Войти через Google</button>
+</form>
+
+<p class="lead">
+  Будут запрошены права:
+</p>
+<ul><li><code>https://www.googleapis.com/auth/drive</code></li></ul>
+
+<p class="lead">
+  Google вернёт браузер на <code>http://127.0.0.1:8819/oauth2callback</code> — это тот же порт, на котором открыта
+  эта страница, поэтому код авторизации не покидает машину.
+</p>
+
+</body>
+</html>

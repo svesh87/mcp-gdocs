@@ -113,3 +113,17 @@ func (c Credentials) OAuthConfig(scopes []string, redirectURL string) *oauth2.Co
 // it is an action by a person, not a retry.
 var ErrNoToken = errors.New("no Google token yet: run `mcp-gdocs login` on a machine with a browser, " +
 	"or open /login?key=<token> on a server started with --transport=streamable-http")
+
+// NoTokenAt is ErrNoToken for a server with a public address: the same condition, but the
+// way out is one address and it carries no key, because the gateway adds the bearer.
+func NoTokenAt(loginURL string) error { return noTokenError{loginURL: loginURL} }
+
+type noTokenError struct{ loginURL string }
+
+func (e noTokenError) Error() string {
+	return "no Google token yet: sign in at " + e.loginURL
+}
+
+// Is keeps errors.Is(err, ErrNoToken) true, which is how callers tell "nobody signed in"
+// from a failure to reach Google.
+func (e noTokenError) Is(target error) bool { return target == ErrNoToken }

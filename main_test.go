@@ -52,6 +52,74 @@ func TestLoginRefusesWithoutAClientFile(t *testing.T) {
 	}
 }
 
+// The login command signs in through loopback, which a Web application client does not
+// accept; a server with a public address signs in on its own page.
+func TestLoginRefusesAPublicURL(t *testing.T) {
+	credentials, tokenDir := writeCredentials(t)
+
+	err := run([]string{"login", "--credentials", credentials, "--token-dir", tokenDir,
+		"--public-url", "https://mcp.example.com/gdocs"})
+	if err == nil || !strings.Contains(err.Error(), "/login") {
+		t.Errorf("expected a refusal pointing at the server's page, got %v", err)
+	}
+}
+
+func TestPublicURLChoosesTheSignIn(t *testing.T) {
+	credentials, tokenDir := writeCredentials(t)
+	t.Setenv("MCP_AUTH_TOKEN", "bearer-token")
+
+	for _, test := range []struct {
+		args      []string
+		loginURL  string
+		mountsOld bool
+	}{
+		// No flag: the loopback route, mounted at the paths it always had.
+		{nil, "", true},
+		{[]string{"--public-url", "https://mcp.example.com/gdocs/"}, "https://mcp.example.com/gdocs/login", false},
+	} {
+		args := append([]string{"--transport", "streamable-http", "--credentials", credentials,
+			"--token-dir", tokenDir}, test.args...)
+
+		flags, done, err := parseFlags("test", args)
+		if err != nil || done {
+			t.Fatalf("parsing flags: %v %v", err, done)
+		}
+		cfg, err := loadConfig(flags)
+		if err != nil {
+			t.Fatalf("loading the configuration: %v", err)
+		}
+		authenticator, err := newAuthenticator(cfg)
+		if err != nil {
+			t.Fatalf("building the authenticator: %v", err)
+		}
+
+		pages, err := newWebLogin(cfg, authenticator)
+		if err != nil {
+			t.Fatalf("building the sign-in: %v", err)
+		}
+		if pages.LoginURL() != test.loginURL {
+			t.Errorf("%v: LoginURL = %q, want %q", test.args, pages.LoginURL(), test.loginURL)
+		}
+		if _, ok := pages.Handlers()[auth.CallbackPath]; ok != test.mountsOld {
+			t.Errorf("%v: %s mounted = %v, want %v", test.args, auth.CallbackPath, ok, test.mountsOld)
+		}
+
+		// A tool called before anybody signed in: the loopback advice without the flag,
+		// the public page with it — and ErrNoToken either way.
+		provider := &lazyClients{authenticator: authenticator, loginURL: pages.LoginURL()}
+		_, err = provider.Google(context.Background())
+		if !errors.Is(err, auth.ErrNoToken) {
+			t.Fatalf("%v: a server with no token should say so, got %v", test.args, err)
+		}
+		if test.loginURL == "" && err.Error() != auth.ErrNoToken.Error() {
+			t.Errorf("without --public-url the message is the old one, got %v", err)
+		}
+		if test.loginURL != "" && !strings.Contains(err.Error(), test.loginURL) {
+			t.Errorf("with --public-url the message names the page, got %v", err)
+		}
+	}
+}
+
 func TestNewAuthenticatorCreatesTheTokenDirectory(t *testing.T) {
 	credentials, tokenDir := writeCredentials(t)
 

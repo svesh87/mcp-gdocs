@@ -273,6 +273,33 @@ func TestPublicFormRefusesAnotherSite(t *testing.T) {
 	}
 }
 
+// What a browser really sends from the page itself: no-referrer makes Origin "null", and
+// Sec-Fetch-Site says same-origin. Refusing this broke the sign-in (2026-10-28).
+func TestPublicFormAcceptsItsOwnPageWithANullOrigin(t *testing.T) {
+	handlers := publicLogin(t, NewStore(filepath.Join(t.TempDir(), "token.json")), "").Handlers()
+
+	submit := throughGateway(http.MethodPost, "/login", strings.NewReader(""))
+	submit.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	submit.Header.Set("Origin", "null")
+	submit.Header.Set("Sec-Fetch-Site", "same-origin")
+
+	recorder := httptest.NewRecorder()
+	handlers[LoginPath].ServeHTTP(recorder, submit)
+	if recorder.Code == http.StatusForbidden {
+		t.Errorf("the page's own submission was refused as cross-site: %s", recorder.Body.String())
+	}
+
+	submit = throughGateway(http.MethodPost, "/login", strings.NewReader(""))
+	submit.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	submit.Header.Set("Sec-Fetch-Site", "cross-site")
+
+	recorder = httptest.NewRecorder()
+	handlers[LoginPath].ServeHTTP(recorder, submit)
+	if recorder.Code != http.StatusForbidden {
+		t.Errorf("a cross-site submission should be refused, got %d", recorder.Code)
+	}
+}
+
 // The loopback route answers the header exactly as before --public-url existed: it never
 // looked at it, and a page that suddenly opened for it would be a change nobody asked for.
 func TestLoopbackIgnoresTheHeader(t *testing.T) {

@@ -44,6 +44,8 @@ type WebLogin struct {
 	// its scheme and host. Both empty in the loopback route.
 	publicURL    string
 	publicOrigin string
+	// crossOrigin guards form submissions in the public route; nil in the loopback route.
+	crossOrigin *http.CrossOriginProtection
 
 	mu      sync.Mutex
 	pending map[string]*pendingFlow
@@ -80,6 +82,12 @@ func NewPublicWebLogin(a *Authenticator, bearer, publicURL string) (*WebLogin, e
 	l := NewWebLogin(a, bearer)
 	l.publicURL = base
 	l.publicOrigin = parsed.Scheme + "://" + parsed.Host
+	// Behind the gateway the Host header is not the public address, so that one is trusted
+	// explicitly.
+	l.crossOrigin = http.NewCrossOriginProtection()
+	if err := l.crossOrigin.AddTrustedOrigin(l.publicOrigin); err != nil {
+		return nil, fmt.Errorf("the public URL %q has no usable origin: %w", publicURL, err)
+	}
 
 	return l, nil
 }
@@ -160,12 +168,15 @@ func (l *WebLogin) view(key string) pageView {
 // crossSite says whether a form submission came from a page other than this server's own.
 // Only the public route asks: there the gateway adds the bearer to whatever the browser
 // sends, so a form on someone else's site would otherwise be enough to start a sign-in.
+//
+// Origin alone cannot tell: the page is served with no-referrer, and then browsers send
+// "Origin: null" even from the page itself. Sec-Fetch-Site does tell, and
+// CrossOriginProtection reads it first, falling back to Origin for browsers without it.
 func (l *WebLogin) crossSite(r *http.Request) bool {
-	if l.publicURL == "" {
+	if l.crossOrigin == nil {
 		return false
 	}
-	origin := r.Header.Get("Origin")
-	return origin != "" && origin != l.publicOrigin
+	return l.crossOrigin.Check(r) != nil
 }
 
 // login shows the state of the sign-in, and on a submission sends the browser to Google.

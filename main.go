@@ -19,6 +19,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"sync"
@@ -26,6 +27,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/svesh87/mcp-gdocs/internal/access"
 	"github.com/svesh87/mcp-gdocs/internal/auth"
 	"github.com/svesh87/mcp-gdocs/internal/config"
 	"github.com/svesh87/mcp-gdocs/internal/google"
@@ -91,6 +93,13 @@ func parseFlags(name string, args []string) (config.Flags, bool, error) {
 			"absolute external address of the server behind a gateway, e.g. https://mcp.example.com/gdocs; "+
 				"the sign-in then uses a Web application client returning to <public-url>/callback. "+
 				"Empty means the loopback sign-in")
+		accessTeam = set.String("access-team-domain", "",
+			"Cloudflare Access team domain, e.g. example.cloudflareaccess.com; with --access-aud and "+
+				"--access-email the sign-in pages demand an Access token issued to an allowed e-mail. "+
+				"Needs --public-url. Empty means no such check")
+		accessAUD   = set.String("access-aud", "", "AUD tag of the Cloudflare Access application the sign-in pages sit behind")
+		accessEmail = set.String("access-email", "",
+			"e-mails the Cloudflare Access token must be issued to, comma separated")
 		showVersion = set.Bool("version", false, "print the version and exit")
 	)
 
@@ -113,6 +122,10 @@ func parseFlags(name string, args []string) (config.Flags, bool, error) {
 		FilesDir:    *filesDir,
 		Tools:       *toolGroups,
 		PublicURL:   *publicURL,
+
+		AccessTeamDomain: *accessTeam,
+		AccessAUD:        *accessAUD,
+		AccessEmail:      *accessEmail,
 	}, false, nil
 }
 
@@ -191,7 +204,12 @@ func serve(cfg *config.Config) error {
 			fmt.Fprintln(os.Stderr, "mcp-gdocs: sign in at "+address)
 		}
 
-		return transport.ServeHTTP(servers, discovery, cfg.Address, cfg.AuthToken, pages.Handlers())
+		handlers, err := pageHandlers(cfg, pages)
+		if err != nil {
+			return err
+		}
+
+		return transport.ServeHTTP(servers, discovery, cfg.Address, cfg.AuthToken, handlers)
 	}
 
 	served := make(chan error, 1)
@@ -231,6 +249,30 @@ func newWebLogin(cfg *config.Config, authenticator *auth.Authenticator) (*auth.W
 		return auth.NewWebLogin(authenticator, cfg.AuthToken), nil
 	}
 	return auth.NewPublicWebLogin(authenticator, cfg.AuthToken, cfg.PublicURL)
+}
+
+// pageHandlers are the sign-in pages as the HTTP transport mounts them: as they are, or,
+// with the Access flags, each behind the Cloudflare Access check. Every page is — the
+// sign-in, the root that redirects to it and the callback Google returns to, which comes
+// back through Access in the same browser. The MCP endpoints and the health check are not
+// pages and are not in this map.
+func pageHandlers(cfg *config.Config, pages *auth.WebLogin) (map[string]http.Handler, error) {
+	handlers := pages.Handlers()
+	if cfg.AccessTeamDomain == "" {
+		return handlers, nil
+	}
+
+	verifier, err := access.New(cfg.AccessTeamDomain, cfg.AccessAUD, cfg.AccessEmails)
+	if err != nil {
+		return nil, err
+	}
+
+	guarded := make(map[string]http.Handler, len(handlers))
+	for path, handler := range handlers {
+		guarded[path] = verifier.Require(handler)
+	}
+
+	return guarded, nil
 }
 
 // login signs in from a machine that has a browser.

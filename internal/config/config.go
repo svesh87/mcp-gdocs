@@ -91,6 +91,13 @@ type Config struct {
 	// a trailing slash, e.g. https://mcp.example.com/gdocs. Empty means the loopback
 	// sign-in, exactly as before the flag existed.
 	PublicURL string
+	// AccessTeamDomain, AccessAUD and AccessEmails turn on the Cloudflare Access check of
+	// the sign-in pages: the team (e.g. example.cloudflareaccess.com), the AUD tag of the
+	// application the pages sit behind, and the e-mails allowed through. All empty means
+	// no check, exactly as before the flags existed.
+	AccessTeamDomain string
+	AccessAUD        string
+	AccessEmails     []string
 }
 
 // Flags are the command line values Load needs. Kept apart from parsing so a test can
@@ -105,6 +112,10 @@ type Flags struct {
 	FilesDir    string
 	Tools       string
 	PublicURL   string
+
+	AccessTeamDomain string
+	AccessAUD        string
+	AccessEmail      string
 }
 
 // Env reads a variable. Tests substitute a map instead of the process environment.
@@ -180,7 +191,92 @@ func Load(flags Flags, env Env) (*Config, error) {
 	}
 	cfg.PublicURL = publicURL
 
+	if err := loadAccess(cfg, flags); err != nil {
+		return nil, err
+	}
+
 	return cfg, nil
+}
+
+// loadAccess validates the Cloudflare Access check: all three flags or none.
+//
+// Part of them is refused rather than ignored. The check exists to be the lock that holds
+// when a policy in front of the server is wrong, and a server that started with half of it
+// would look locked and be open.
+func loadAccess(cfg *Config, flags Flags) error {
+	team := strings.TrimSpace(flags.AccessTeamDomain)
+	aud := strings.TrimSpace(flags.AccessAUD)
+	emails := ParseEmails(flags.AccessEmail)
+
+	given := 0
+	for _, set := range []bool{team != "", aud != "", len(emails) > 0} {
+		if set {
+			given++
+		}
+	}
+
+	switch {
+	case given == 0:
+		return nil
+	case given < 3:
+		return errors.New("--access-team-domain, --access-aud and --access-email go together: " +
+			"the Cloudflare Access check is all three or none")
+	}
+
+	// The check guards the sign-in pages of the public route, which is the only one Access
+	// can stand in front of: the loopback pages are opened on 127.0.0.1, where no token
+	// is ever added.
+	if cfg.PublicURL == "" {
+		return errors.New("the Cloudflare Access check applies to the sign-in pages behind a gateway: " +
+			"it needs --public-url")
+	}
+
+	team, err := ParseTeamDomain(team)
+	if err != nil {
+		return err
+	}
+
+	for _, email := range emails {
+		if !strings.Contains(email, "@") {
+			return fmt.Errorf("--access-email %q is not an e-mail address", email)
+		}
+	}
+
+	cfg.AccessTeamDomain = team
+	cfg.AccessAUD = aud
+	cfg.AccessEmails = emails
+
+	return nil
+}
+
+// ParseTeamDomain accepts the team domain with or without https:// and a trailing slash,
+// and returns the bare host: the issuer of the tokens and the address of the keys are both
+// built from it.
+func ParseTeamDomain(raw string) (string, error) {
+	host := strings.TrimRight(strings.TrimPrefix(strings.TrimSpace(raw), "https://"), "/")
+	if host == "" || strings.ContainsAny(host, "/?#@ ") || strings.Contains(host, "://") {
+		return "", fmt.Errorf("--access-team-domain %q must be a host name, "+
+			"e.g. example.cloudflareaccess.com", raw)
+	}
+	return host, nil
+}
+
+// ParseEmails splits a comma-separated list, dropping blanks and repeats. Case is kept as
+// written; the check compares without it.
+func ParseEmails(raw string) []string {
+	seen := map[string]bool{}
+	var emails []string
+
+	for _, field := range strings.Split(raw, ",") {
+		email := strings.TrimSpace(field)
+		if email == "" || seen[strings.ToLower(email)] {
+			continue
+		}
+		seen[strings.ToLower(email)] = true
+		emails = append(emails, email)
+	}
+
+	return emails
 }
 
 // ParsePublicURL validates --public-url and returns it without a trailing slash. Empty

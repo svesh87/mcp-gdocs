@@ -431,6 +431,52 @@ The `login` command refuses `--public-url`: it signs in through loopback, which 
 application client does not accept. A refresh token belongs to the client that issued it,
 so switching a token directory from a Desktop client to a Web one means signing in again.
 
+The public address may also be a host of its own with no path, e.g.
+`https://gdocs.example.com`: the pages are then `https://gdocs.example.com/login`, the root
+redirects there, and the redirect registered in the Web client is
+`https://gdocs.example.com/callback`.
+
+### Behind Cloudflare Access
+
+When the gateway is Cloudflare Access, the pages can check Access's own token as a second
+lock. Access decides who reaches the pages; the check makes the server refuse whatever
+Access let through by mistake. The case it is for: the MCP endpoints are reached by agents
+with service tokens, and a policy that one day lets a service token open the pages too
+would let an agent start a consent screen in the owner's name. A service token's JWT
+carries a `common_name` and no e-mail, so it is refused whatever the policies say.
+
+Three flags, all three or none; part of them is a refusal to start, because a server that
+started with half the check would look locked and be open. They need `--public-url`:
+
+| Flag | What it is |
+|---|---|
+| `--access-team-domain` | the team domain, e.g. `example.cloudflareaccess.com` (`https://` and a trailing slash are dropped) |
+| `--access-aud` | the AUD tag of the Access application the pages sit behind |
+| `--access-email` | the e-mails allowed through, comma separated, compared without case |
+
+With them, every page — `/login`, `/` and `/callback` — demands the
+`Cf-Access-Jwt-Assertion` header Access adds, and the token in it has to:
+
+- be signed RS256 by a key from `https://<team>/cdn-cgi/access/certs`. The keys are cached
+  for an hour; a token with an unknown `kid` makes the server ask again, at most once a
+  minute;
+- have the AUD tag in `aud`, `iss` equal to `https://<team>`, and `exp`/`nbf` valid within
+  30 seconds;
+- carry an `email` from the list.
+
+Anything else gets `403 forbidden` with no reason given; the reason goes to the log,
+without the token. The callback is checked too: Google returns the browser through Access,
+so it carries the token like any other page. `/healthz` and `/mcp/*` are untouched — the
+agents reach them with their own credentials, and the bearer check there is as before.
+Without the flags nothing changes.
+
+```bash
+mcp-gdocs --transport=streamable-http --address=0.0.0.0:8819 --token-dir=/tokens \
+  --public-url=https://gdocs.example.com --allow-write \
+  --access-team-domain=example.cloudflareaccess.com --access-aud=<AUD tag> \
+  --access-email=owner@example.com
+```
+
 ## Running
 
 ```bash
@@ -446,6 +492,7 @@ mcp-gdocs --credentials /config/gcp-oauth.keys.json --token-dir /config/tokens -
 | `--scopes` | scopes to ask for, comma separated. Empty means `drive`, `spreadsheets`, `presentations`, `documents` |
 | `--allow-write` | register the tools that change documents. Off by default |
 | `--public-url` | absolute external address behind a gateway, e.g. `https://mcp.example.com/gdocs`. Empty (default) means the loopback sign-in. Only with `streamable-http`; see [Behind a gateway](#behind-a-gateway) |
+| `--access-team-domain`, `--access-aud`, `--access-email` | the Cloudflare Access check of the sign-in pages: all three or none, only with `--public-url`. Empty (default) means no check; see [Behind Cloudflare Access](#behind-cloudflare-access) |
 | `--version` | print the version and exit |
 
 Three environment variables, because a secret in a flag shows up in a process list:

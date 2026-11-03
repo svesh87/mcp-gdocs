@@ -192,10 +192,121 @@ func TestParsePublicURL(t *testing.T) {
 		"https://mcp.example.com/gdocs":  "https://mcp.example.com/gdocs",
 		"https://mcp.example.com/gdocs/": "https://mcp.example.com/gdocs",
 		"http://127.0.0.1:8080":          "http://127.0.0.1:8080",
+		// A host of its own, with no path: the pages are then <host>/login and
+		// <host>/callback.
+		"https://gdocs.example.com":  "https://gdocs.example.com",
+		"https://gdocs.example.com/": "https://gdocs.example.com",
 	} {
 		got, err := ParsePublicURL(raw)
 		if err != nil || got != want {
 			t.Errorf("ParsePublicURL(%q) = %q, %v; want %q", raw, got, err, want)
+		}
+	}
+}
+
+// publicFlags are a server behind a gateway, the only setup the Access check applies to.
+func publicFlags() Flags {
+	flags := validFlags()
+	flags.Transport = TransportHTTP
+	flags.Address = "127.0.0.1:8819"
+	flags.PublicURL = "https://gdocs.example.com"
+	return flags
+}
+
+// Without the Access flags nothing changes: no check, and the configuration is what it was.
+func TestAccessIsOptIn(t *testing.T) {
+	for _, flags := range []Flags{validFlags(), publicFlags()} {
+		cfg, err := Load(flags, env(map[string]string{EnvAuthToken: "t"}))
+		if err != nil {
+			t.Fatalf("no Access flags should start as before: %v", err)
+		}
+		if cfg.AccessTeamDomain != "" || cfg.AccessAUD != "" || cfg.AccessEmails != nil {
+			t.Errorf("no flags means no check, got %q %q %v", cfg.AccessTeamDomain, cfg.AccessAUD, cfg.AccessEmails)
+		}
+	}
+}
+
+func TestAccessFlags(t *testing.T) {
+	flags := publicFlags()
+	flags.AccessTeamDomain = " https://team.cloudflareaccess.com/ "
+	flags.AccessAUD = " aud-tag "
+	flags.AccessEmail = "owner@example.com, ,Second@example.com,owner@EXAMPLE.com"
+
+	cfg, err := Load(flags, env(map[string]string{EnvAuthToken: "t"}))
+	if err != nil {
+		t.Fatalf("all three flags with a public address should start: %v", err)
+	}
+	if cfg.AccessTeamDomain != "team.cloudflareaccess.com" {
+		t.Errorf("the team domain should come back as a bare host, got %q", cfg.AccessTeamDomain)
+	}
+	if cfg.AccessAUD != "aud-tag" {
+		t.Errorf("the AUD tag came back as %q", cfg.AccessAUD)
+	}
+	if strings.Join(cfg.AccessEmails, ",") != "owner@example.com,Second@example.com" {
+		t.Errorf("the e-mails should lose blanks and repeats, got %v", cfg.AccessEmails)
+	}
+}
+
+// Part of the check is refused rather than ignored: a server started with half of it would
+// look locked and be open.
+func TestAccessFlagsAreAllOrNothing(t *testing.T) {
+	const (
+		team  = "team.cloudflareaccess.com"
+		aud   = "aud-tag"
+		email = "owner@example.com"
+	)
+
+	for _, partial := range [][3]string{
+		{team, "", ""},
+		{"", aud, ""},
+		{"", "", email},
+		{team, aud, ""},
+		{team, "", email},
+		{"", aud, email},
+		{team, aud, " , "},
+	} {
+		flags := publicFlags()
+		flags.AccessTeamDomain, flags.AccessAUD, flags.AccessEmail = partial[0], partial[1], partial[2]
+
+		_, err := Load(flags, env(map[string]string{EnvAuthToken: "t"}))
+		if err == nil || !strings.Contains(err.Error(), "all three or none") {
+			t.Errorf("%q: a partial Access check should be refused, got %v", partial, err)
+		}
+	}
+}
+
+func TestAccessNeedsThePublicRoute(t *testing.T) {
+	loopback := publicFlags()
+	loopback.PublicURL = ""
+	stdio := validFlags()
+
+	for name, flags := range map[string]Flags{"loopback HTTP": loopback, "stdio": stdio} {
+		flags.AccessTeamDomain = "team.cloudflareaccess.com"
+		flags.AccessAUD = "aud-tag"
+		flags.AccessEmail = "owner@example.com"
+
+		_, err := Load(flags, env(map[string]string{EnvAuthToken: "t"}))
+		if err == nil || !strings.Contains(err.Error(), "--public-url") {
+			t.Errorf("%s: the Access check without a public address should be refused, got %v", name, err)
+		}
+	}
+}
+
+func TestAccessRefusesBadValues(t *testing.T) {
+	for _, test := range []struct{ team, email, want string }{
+		{"https://team.cloudflareaccess.com/path", "owner@example.com", "--access-team-domain"},
+		{"http://team.cloudflareaccess.com", "owner@example.com", "--access-team-domain"},
+		{"team.cloudflareaccess.com?x=1", "owner@example.com", "--access-team-domain"},
+		{"team.cloudflareaccess.com", "owner", "--access-email"},
+	} {
+		flags := publicFlags()
+		flags.AccessTeamDomain = test.team
+		flags.AccessAUD = "aud-tag"
+		flags.AccessEmail = test.email
+
+		_, err := Load(flags, env(map[string]string{EnvAuthToken: "t"}))
+		if err == nil || !strings.Contains(err.Error(), test.want) {
+			t.Errorf("%q / %q: want a refusal naming %s, got %v", test.team, test.email, test.want, err)
 		}
 	}
 }

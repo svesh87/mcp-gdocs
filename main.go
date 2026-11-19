@@ -155,7 +155,12 @@ func serve(cfg *config.Config) error {
 
 	provider := &lazyClients{authenticator: authenticator, loginURL: pages.LoginURL()}
 
-	mcpServer, err := newToolServer(cfg, provider, groups)
+	// Sharing is a decision about the whole server, not about a window: a window on slides
+	// carries no drive-share of its own, and the one slides tool that opens a file by link
+	// for a moment has to know what the operator said at startup.
+	mayShare := groups[tools.DriveShare]
+
+	mcpServer, err := newToolServer(cfg, provider, groups, mayShare)
 	if err != nil {
 		return err
 	}
@@ -189,7 +194,7 @@ func serve(cfg *config.Config) error {
 					alsoOffer = tools.WindowDriveReads()
 				}
 
-				full, err = newToolServer(cfg, provider, allowed, alsoOffer...)
+				full, err = newToolServer(cfg, provider, allowed, mayShare, alsoOffer...)
 				if err != nil {
 					return err
 				}
@@ -226,7 +231,7 @@ func serve(cfg *config.Config) error {
 // newToolServer builds one MCP server offering one set of tool groups. Several of them
 // share everything else: the same client provider, the same token, the same sign-in.
 func newToolServer(cfg *config.Config, provider tools.Clients, groups map[tools.Group]bool,
-	alsoOffer ...string) (*server.MCPServer, error) {
+	mayShare bool, alsoOffer ...string) (*server.MCPServer, error) {
 	mcpServer := server.NewMCPServer("mcp-gdocs", version, server.WithToolCapabilities(true))
 
 	if err := tools.Register(mcpServer, tools.Options{
@@ -235,6 +240,8 @@ func newToolServer(cfg *config.Config, provider tools.Clients, groups map[tools.
 		FilesDir:   cfg.FilesDir,
 		Groups:     groups,
 		AlsoOffer:  alsoOffer,
+		Version:    version,
+		MayShare:   mayShare,
 	}); err != nil {
 		return nil, err
 	}

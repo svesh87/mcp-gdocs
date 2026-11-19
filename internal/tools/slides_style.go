@@ -177,7 +177,12 @@ func (r *registry) registerSlidesLinks(srv *server.MCPServer) {
 			"board, the document — is not part of that text: it has to be put back, or the new slide "+
 			"quietly loses what the old one pointed at. A summary table is where this matters most: the "+
 			"task numbers people want to click on live in its cells, and row and column are how they are "+
-			"reached. gdocs_slides_inspect_text_structure reports the links a sample has."),
+			"reached. gdocs_slides_inspect_text_structure reports the links a sample has. "+
+			"Making a link also repaints it: Slides sets the stretch to the theme's HYPERLINK colour "+
+			"and underlines it, in a table cell as in a text box, whatever colour the text had — on "+
+			"a dark cell that is usually the wrong colour. Style the same stretch with "+
+			"gdocs_slides_set_text_style afterwards to choose another, or change HYPERLINK itself "+
+			"with gdocs_slides_set_theme_colors."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
 		mcp.WithString("object_id", mcp.Required(), mcp.Description(
 			"Text box holding the text, or the table when row and column are named.")),

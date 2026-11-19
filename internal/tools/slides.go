@@ -141,7 +141,10 @@ func (r *registry) registerSlides(srv *server.MCPServer) {
 	srv.AddTool(mcp.NewTool("gdocs_slides_export_thumbnail",
 		mcp.WithDescription("Render one slide to a picture and return the address it can be fetched from. "+
 			"Use it to look at what a change actually did instead of trusting the batch that made it. "+
-			"The address is short-lived."),
+			"The address is short-lived. The render is the slide as the audience sees it: speaker "+
+			"notes are not on it, and gdocs_slides_inspect_page is where they are read back. Text that "+
+			"does not fit its box does show here, which is the reason to look — the API reports no "+
+			"such thing."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
 		mcp.WithString("page_object_id", mcp.Required(), mcp.Description("Object identifier of the slide.")),
 		mcp.WithString("mime_type", mcp.DefaultString("PNG"), mcp.Description("PNG or JPEG.")),
@@ -166,7 +169,9 @@ func (r *registry) registerSlides(srv *server.MCPServer) {
 		mcp.WithDescription("Copy a presentation, which is how a new deck is started from a template: the copy "+
 			"keeps the master, the layouts, the fonts and the colours, so everything added afterwards "+
 			"inherits them. A deck made with gdocs_slides_create starts on the default theme instead, "+
-			"and looks nothing like the rest until that theme is built."),
+			"and looks nothing like the rest until that theme is built. The template's sharing does "+
+			"not come with the copy — the folder's does — so the answer carries the copy's permissions "+
+			"as they are, and open_to_anyone_with_link."),
 		mcp.WithString("template_id", mcp.Required(), mcp.Description("File identifier of the template presentation.")),
 		mcp.WithString("name", mcp.Required(), mcp.Description("Name for the new presentation.")),
 		mcp.WithString("parent_folder_id", mcp.Description("Folder to put it in. Without one it lands beside the template.")),
@@ -187,13 +192,18 @@ func (r *registry) registerSlides(srv *server.MCPServer) {
 	srv.AddTool(mcp.NewTool("gdocs_slides_set_text",
 		mcp.WithDescription("Replace the text of one text box with plain text, keeping the box where it is. "+
 			"The new text inherits the styling of its placeholder, which is what keeps a filled-in slide "+
-			"looking like the template it came from. For a title plus bullets use "+
-			"gdocs_slides_replace_body_nested_list instead. With row and column it replaces the text of "+
-			"one cell of a table, which is the same job with the same styling behind it."),
+			"looking like the template it came from. Newlines make paragraphs and nothing more: the "+
+			"lines come out as one block of plain paragraphs with no markers and no indents, and a "+
+			"box that held a bullet list before does not get its bullets back. Several points, or a "+
+			"title plus bullets, are a list — use gdocs_slides_set_list, which takes the lines with "+
+			"their levels and lets Slides draw the markers. With row and column it replaces the text "+
+			"of one cell of a table, which is the same job with the same styling behind it."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
 		mcp.WithString("object_id", mcp.Required(), mcp.Description(
 			"Object identifier of the text box, or of the table when row and column are named.")),
-		mcp.WithString("text", mcp.Required(), mcp.Description("The text to put in it. Newlines make paragraphs.")),
+		mcp.WithString("text", mcp.Required(), mcp.Description(
+			"The text to put in it. Newlines make paragraphs — plain ones, not list items; for a "+
+				"list use gdocs_slides_set_list.")),
 		mcp.WithNumber("row", mcp.Description(cellRowHelp)),
 		mcp.WithNumber("column", mcp.Description(cellColumnHelp)),
 	), r.slidesSetText)
@@ -902,12 +912,15 @@ func (r *registry) slidesCopyPresentation(ctx context.Context, req mcp.CallToolR
 		return toolError(err), nil
 	}
 
-	return resultJSON(map[string]any{
+	payload := map[string]any{
 		"presentation_id": file.ID,
 		"name":            file.Name,
 		"web_view_link":   file.WebViewLink,
 		"parents":         file.Parents,
-	})
+	}
+	reportAccess(ctx, client, file.ID, payload)
+
+	return resultJSON(payload)
 }
 
 // slidesAddSlide adds a slide following a layout of the presentation.

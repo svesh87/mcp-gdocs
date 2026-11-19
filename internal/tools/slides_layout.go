@@ -43,6 +43,17 @@ const geometryElements = "objectId,pageElements(objectId,size,transform," +
 const geometryMask = "pageSize,slides(" + geometryElements + "),layouts(" + geometryElements +
 	"),masters(" + geometryElements + ")"
 
+// bandElements is geometryElements with each table's cells and what they span, which is
+// what taking a row or a column out has to look at before it asks.
+const bandElements = "objectId,pageElements(objectId,size,transform," +
+	"table(rows,columns,tableColumns(columnWidth)," +
+	"tableRows(rowHeight,tableCells(location,rowSpan,columnSpan))))"
+
+// bandMask is the reading behind the removal of a table's row or column: every page there
+// is, as geometryMask reads them, plus the merges.
+const bandMask = "pageSize,slides(" + bandElements + "),layouts(" + bandElements +
+	"),masters(" + bandElements + ")"
+
 // tableMask reads the tables on every slide: cells, spans, column widths, row heights and
 // the style of the text inside, which is what reproducing a sample's table needs.
 const tableMask = "slides(objectId,pageElements(objectId,size,transform," +
@@ -159,12 +170,28 @@ func (r *registry) registerSlidesLayout(srv *server.MCPServer) {
 	), r.slidesCreateShape)
 
 	srv.AddTool(mcp.NewTool("gdocs_slides_insert_image",
-		mcp.WithDescription("Put a picture on a slide by address. Slides fetches it once and keeps its own "+
-			"copy, so the address only has to work at that moment. Without a size the picture keeps its "+
-			"own proportions."),
+		mcp.WithDescription("Put a picture on a slide, from an address or from a file. Slides fetches it "+
+			"once and keeps its own copy, so the address only has to work at that moment. Without a size "+
+			"the picture keeps its own proportions. "+
+			"The API takes an address and nothing else, and fetches it from Google's side as nobody in "+
+			"particular: a private Drive file, a localhost address or a link behind a login all fail "+
+			"with \"there was a problem retrieving the image\". So a picture on disk goes in file, and "+
+			"this tool does what a person would do by hand: uploads it to Drive, opens it to anyone "+
+			"with the link, inserts it, and takes the link back — on every path out, including a failed "+
+			"insertion. The answer says link_access closed, and says STILL OPEN in capitals with the "+
+			"call that closes it if taking it back failed. Opening a file by link is sharing, so file "+
+			"works only on a server started with drive-share, and needs --files-dir. PNG, JPEG and GIF "+
+			"up to 50 MB; the uploaded copy stays on Drive, private."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
 		mcp.WithString("page_object_id", mcp.Required(), mcp.Description("Slide to put it on.")),
-		mcp.WithString("url", mcp.Required(), mcp.Description("Address of the picture, reachable by Google.")),
+		mcp.WithString("url", mcp.Description(
+			"Address of the picture, fetchable by Google without signing in. Either this or file.")),
+		mcp.WithString("file", mcp.Description(
+			"Picture inside the server's files directory, named relative to it — the same directory "+
+				"the export tools write to (gdocs_reference topic=files says how a client reaches it). "+
+				"Either this or url.")),
+		mcp.WithString("upload_folder_id", mcp.Description(
+			"With file: Drive folder to keep the uploaded copy in. Without one it lands in My Drive.")),
 		mcp.WithNumber("x", mcp.Description("Left edge in EMU.")),
 		mcp.WithNumber("y", mcp.Description("Top edge in EMU.")),
 		mcp.WithNumber("width", mcp.Description("Width in EMU.")),
@@ -210,7 +237,14 @@ func (r *registry) registerSlidesLayout(srv *server.MCPServer) {
 			"Name either object_ids or a table, never both in one call. "+
 			"Take the identifiers from gdocs_slides_list and the indexes from gdocs_slides_read_table, "+
 			"never a guess: removing a row moves every row under it up, so a second removal needs a "+
-			"fresh reading or the count this call answers with."),
+			"fresh reading or the count this call answers with — after rows 2 and 3 are gone, what was "+
+			"row 4 is row 2, and every index a caller still holds for the rows below is stale. Columns "+
+			"shift left the same way. "+
+			"A row that runs through a cell merged down several rows is refused, and so is a column "+
+			"through a cell merged across several: deleteTableRow removes every row the cell it names "+
+			"spans, so such a removal can take the neighbouring rows with it. The refusal names the "+
+			"merged cell; take the merge apart with gdocs_slides_edit_table what=unmerge, remove the "+
+			"row, and merge what is left again with gdocs_slides_style_table."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
 		mcp.WithArray("object_ids", mcp.WithStringItems(), mcp.Description(
 			"Identifiers to remove: slides, or elements on them.")),
@@ -448,7 +482,7 @@ func (r *registry) slidesDeleteTableBand(ctx context.Context, client *google.Cli
 		return toolError(fmt.Errorf("count is %d: name at least one %s to remove", count, what)), nil
 	}
 
-	presentation, err := client.Presentation(ctx, presentationID, geometryMask)
+	presentation, err := client.Presentation(ctx, presentationID, bandMask)
 	if err != nil {
 		return toolError(err), nil
 	}
@@ -495,6 +529,28 @@ func (r *registry) slidesDeleteTableBand(ctx context.Context, client *google.Cli
 			"or remove the table itself through object_ids", what)), nil
 	}
 
+	// deleteTableRow removes "the row this cell spans", and for a merged cell that is every
+	// row of the merge: one request aimed at a single row takes its neighbours out with it,
+	// and nothing in the reply says how many went. So a band that runs through a merge along
+	// its own direction is refused here, before anything is sent, with the cell named — the
+	// caller takes the merge apart, removes what it meant to, and merges what is left.
+	if merged := mergeThroughBand(table, what, first, count); merged != nil {
+		top, left := merged.Location.RowIndex, merged.Location.ColumnIndex
+		rowSpan, columnSpan := spansOf(*merged)
+
+		reach := fmt.Sprintf("rows %d to %d", top, top+rowSpan-1)
+		if what == "column" {
+			reach = fmt.Sprintf("columns %d to %d", left, left+columnSpan-1)
+		}
+
+		return toolError(fmt.Errorf("the %s to remove runs through a merged cell: the one at row %d "+
+			"column %d of %s covers %s. Slides removes every %s a merged cell spans, so this would "+
+			"take more than the %d asked for. Nothing has been changed. Take the merge apart with "+
+			"gdocs_slides_edit_table what=unmerge row=%d column=%d row_span=%d column_span=%d, remove "+
+			"the %s, and merge what is left again with gdocs_slides_style_table",
+			what, top, left, tableID, reach, what, count, top, left, rowSpan, columnSpan, what)), nil
+	}
+
 	requests := make([]google.Request, 0, count)
 	for index := 0; index < count; index++ {
 		// Every request names the same cell on purpose: the band moves up into it as the one
@@ -533,7 +589,55 @@ func (r *registry) slidesDeleteTableBand(ctx context.Context, client *google.Cli
 		"rows_left":       rowsLeft,
 		"columns_left":    columnsLeft,
 		"replies":         len(response.Replies),
+		"note": fmt.Sprintf("every %s after the ones removed has moved by %d: what was %s %d is now "+
+			"%s %d. Indexes read before this call are stale for them", what, count, what, first+count,
+			what, first),
 	})
+}
+
+// spansOf is how many rows and columns a cell covers; an unmerged cell covers one of each,
+// which Slides reports as either 1 or nothing at all.
+func spansOf(cell google.TableCell) (int, int) {
+	rowSpan, columnSpan := cell.RowSpan, cell.ColumnSpan
+	if rowSpan < 1 {
+		rowSpan = 1
+	}
+	if columnSpan < 1 {
+		columnSpan = 1
+	}
+
+	return rowSpan, columnSpan
+}
+
+// mergeThroughBand finds a cell merged along the direction of a removal that the band to
+// remove runs through: for rows, a cell spanning more than one row that covers any of them;
+// for columns, the same with columns.
+//
+// Only the merge along the direction matters. A heading merged across a row is one row
+// tall, and taking that row out takes exactly that row.
+func mergeThroughBand(table *google.Table, what string, first, count int) *google.TableCell {
+	for rowIndex := range table.TableRows {
+		cells := table.TableRows[rowIndex].TableCells
+		for index := range cells {
+			cell := &cells[index]
+			if cell.Location == nil {
+				continue
+			}
+
+			rowSpan, columnSpan := spansOf(*cell)
+
+			start, span := cell.Location.RowIndex, rowSpan
+			if what == "column" {
+				start, span = cell.Location.ColumnIndex, columnSpan
+			}
+
+			if span > 1 && start < first+count && first < start+span {
+				return cell
+			}
+		}
+	}
+
+	return nil
 }
 
 // findPageElement looks an identifier up among the elements of every page there is — the
@@ -1872,12 +1976,18 @@ func (r *registry) slidesInsertImage(ctx context.Context, req mcp.CallToolReques
 	if err != nil {
 		return toolError(err), nil
 	}
-	address, err := requiredString(req, "url")
-	if err != nil {
-		return toolError(err), nil
-	}
-	if !strings.HasPrefix(address, "https://") && !strings.HasPrefix(address, "http://") {
-		return toolError(fmt.Errorf("url has to be an http or https address Google can fetch, got %q", address)), nil
+	address := optionalString(req, "url")
+	file := optionalString(req, "file")
+
+	switch {
+	case address == "" && file == "":
+		return toolError(fmt.Errorf("name the picture: url for an address Google can fetch, or file " +
+			"for a picture in the server's files directory")), nil
+	case address != "" && file != "":
+		return toolError(fmt.Errorf("url and file are alternatives: name one")), nil
+	case address != "" && !strings.HasPrefix(address, "https://") && !strings.HasPrefix(address, "http://"):
+		return toolError(fmt.Errorf("url has to be an http or https address Google can fetch, got %q; "+
+			"a picture on disk goes in file instead", address)), nil
 	}
 
 	objectID := optionalString(req, "object_id")
@@ -1921,23 +2031,57 @@ func (r *registry) slidesInsertImage(ctx context.Context, req mcp.CallToolReques
 		return toolError(err), nil
 	}
 
-	result, err := api.SlidesBatchUpdate(ctx, presentationID, []google.Request{{
-		CreateImage: &google.CreateImageRequest{
-			ObjectID:          objectID,
-			URL:               address,
-			ElementProperties: properties,
-		},
-	}})
+	var result *google.BatchUpdateResponse
+	insert := func(from string) error {
+		var err error
+		result, err = api.SlidesBatchUpdate(ctx, presentationID, []google.Request{{
+			CreateImage: &google.CreateImageRequest{
+				ObjectID:          objectID,
+				URL:               from,
+				ElementProperties: properties,
+			},
+		}})
+
+		return err
+	}
+
+	if file == "" {
+		if err := insert(address); err != nil {
+			return toolError(err), nil
+		}
+
+		return resultJSON(map[string]any{
+			"presentation_id": presentationID,
+			"page_object_id":  pageObjectID,
+			"object_id":       objectID,
+			"replies":         len(result.Replies),
+		})
+	}
+
+	published, err := r.withPublishedPicture(ctx, api, file, optionalString(req, "upload_folder_id"), insert)
 	if err != nil {
+		// A failure after the upload still has something to report: where the copy is, and
+		// above all whether its link was closed.
+		if published != nil {
+			left := map[string]any{}
+			published.describe(left)
+
+			return toolError(fmt.Errorf("%w. uploaded_file_id=%v, link_access=%v: %v",
+				err, left["uploaded_file_id"], left["link_access"], left["upload_note"])), nil
+		}
+
 		return toolError(err), nil
 	}
 
-	return resultJSON(map[string]any{
+	payload := map[string]any{
 		"presentation_id": presentationID,
 		"page_object_id":  pageObjectID,
 		"object_id":       objectID,
 		"replies":         len(result.Replies),
-	})
+	}
+	published.describe(payload)
+
+	return resultJSON(payload)
 }
 
 // box is a rectangle in EMU.

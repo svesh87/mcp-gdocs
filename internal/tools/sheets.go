@@ -66,7 +66,10 @@ func (r *registry) registerSheets(srv *server.MCPServer) {
 	srv.AddTool(mcp.NewTool("gdocs_sheets_append",
 		mcp.WithDescription("Add rows after the last row that has anything in it. "+
 			"Rows are inserted rather than written over what sits below, so a table further down the "+
-			"tab stays where it is."),
+			"tab stays where it is. A chart drawn from the rows above does not take the new ones in: "+
+			"its range was fixed when it was drawn. This tool does not look at charts — "+
+			"gdocs_sheets_append_rows does, reports the ones that read the tab, and stretches them "+
+			"with extend_charts; gdocs_sheets_update_chart moves a range by hand."),
 		mcp.WithString("spreadsheet_id", mcp.Required(), mcp.Description(spreadsheetIDHelp)),
 		mcp.WithString("range", mcp.Required(), mcp.Description("Range naming the table to append to, e.g. 'Sheet1'!A:D.")),
 		mcp.WithArray("values", mcp.Required(), mcp.Description("Rows as a list of lists of cell values.")),

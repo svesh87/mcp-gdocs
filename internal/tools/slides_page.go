@@ -35,7 +35,7 @@ var pageMask = "presentationId,title,pageSize," +
 func elementMask(depth int) string {
 	mask := "objectId,title,description,size,transform," +
 		"shape(shapeType,placeholder,shapeProperties(autofit,shapeBackgroundFill,outline,shadow,contentAlignment)," +
-		"text(textElements(textRun(content))))," +
+		"text(textElements(textRun(content,style(fontSize)))))," +
 		"table(rows,columns,tableColumns(columnWidth),tableRows(rowHeight))," +
 		"image(contentUrl,imageProperties(cropProperties,transparency,brightness,contrast,outline))," +
 		"video(url,source,id)," +
@@ -58,7 +58,16 @@ func (r *registry) registerSlidesPage(srv *server.MCPServer) {
 			"and adjustments. This is the tool to start from when reproducing a slide from a sample: "+
 			"gdocs_slides_list reports the text and the box and nothing else, so a slide rebuilt from it "+
 			"comes out without the sample's background, fills and rotations. "+
-			"Everything reported here can be set back with the tools that write."),
+			"Everything reported here can be set back with the tools that write. "+
+			"One thing it cannot report is whether text fits its box: the API says nothing about "+
+			"overflow, and a box whose text runs out of it reads here exactly like one that holds it. "+
+			"Where the font size is written on the text itself, an element carries "+
+			"text_overflow_estimate when arithmetic on character counts says the text is taller than "+
+			"the box — a hint, not a measurement, and its absence proves nothing: a box that takes "+
+			"its font size from the layout is not estimated at all. "+
+			"gdocs_slides_export_thumbnail is what shows it. "+
+			"A chart placed with linked=false is reported as an image, with no sheets_chart: nothing "+
+			"ties it to its workbook any more."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
 		mcp.WithString("page_object_id", mcp.Required(), mcp.Description(
 			"Slide to read. Take it from gdocs_slides_list.")),
@@ -122,7 +131,11 @@ func (r *registry) registerSlidesPage(srv *server.MCPServer) {
 			"element to another slide, and the original has to be in this presentation, because an "+
 			"identifier from another one is not found. Getting a foreign shape here at all takes a person "+
 			"pasting it in the browser, or gdocs_slides_copy_presentation of the whole file. "+
-			"The copy sits exactly on top of the original; gdocs_slides_place_element moves it."),
+			"The copy sits exactly on top of the original; gdocs_slides_place_element moves it. "+
+			"The answer carries id_maps, one per copy: each original identifier against the one its "+
+			"duplicate got — the slide or the element itself, every element of a duplicated slide and "+
+			"every member of a duplicated group — so the copy's title, table or chart can be addressed "+
+			"at once, without reading the new slide back to find out what they are called."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
 		mcp.WithString("object_id", mcp.Required(), mcp.Description(
 			"Element or slide to copy.")),
@@ -131,8 +144,9 @@ func (r *registry) registerSlidesPage(srv *server.MCPServer) {
 				"four places is one call.")),
 		mcp.WithArray("new_object_ids", mcp.WithStringItems(), mcp.Description(
 			"Identifiers to give the copies, in order, so they can be addressed without reading the "+
-				"slide back. Without them Google invents identifiers and reports them. Duplicating a "+
-				"slide renames only the slide; its elements get invented identifiers either way.")),
+				"slide back. Without them Google invents identifiers and reports them. They name the "+
+				"slide or the element itself; what is inside it — the elements of a slide, the members "+
+				"of a group — gets identifiers this server assigns and reports in id_maps.")),
 	), r.slidesDuplicate)
 
 	srv.AddTool(mcp.NewTool("gdocs_slides_hide",
@@ -151,7 +165,11 @@ func (r *registry) registerSlidesPage(srv *server.MCPServer) {
 
 	srv.AddTool(mcp.NewTool("gdocs_slides_set_speaker_notes",
 		mcp.WithDescription("Replace the speaker notes of a slide. The notes are a page of their own behind "+
-			"each slide, and a deck copied without them loses what the presenter was going to say."),
+			"each slide, and a deck copied without them loses what the presenter was going to say. "+
+			"That page is not part of the slide's picture: gdocs_slides_export_thumbnail, "+
+			"gdocs_slides_export_images and a PDF export all render the slide without its notes, so "+
+			"a render cannot confirm what was written here — gdocs_slides_inspect_page reports "+
+			"speaker_notes, and that is the check."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
 		mcp.WithString("page_object_id", mcp.Required(), mcp.Description("Slide whose notes to replace.")),
 		mcp.WithString("text", mcp.Required(), mcp.Description(
@@ -277,6 +295,9 @@ type describedElement struct {
 	// FontScale is Slides shrinking the text to fit. A title reported as 28 pt with a
 	// scale of 0.89 measures 25 pt on screen, and that is the number a person compares.
 	FontScale float64 `json:"font_scale,omitempty"`
+	// TextOverflow is set only when the estimate says the text is taller than its box. The
+	// API reports nothing of the kind, so this is arithmetic and is named as such.
+	TextOverflow *overflowEstimate `json:"text_overflow_estimate,omitempty"`
 
 	Rows     int             `json:"rows,omitempty"`
 	Columns  int             `json:"columns,omitempty"`
@@ -458,6 +479,7 @@ func describeElements(elements []google.PageElement, parent *google.Transform) [
 					entry.AutofitType, entry.FontScale = autofit.AutofitType, autofit.FontScale
 				}
 			}
+			entry.TextOverflow = estimateOverflow(shape, entry.Width, entry.Height)
 		}
 
 		if table := element.Table; table != nil {
@@ -492,6 +514,169 @@ func describeElements(elements []google.PageElement, parent *google.Transform) [
 	}
 
 	return described
+}
+
+// overflowEstimate is the answer to "does this text fit its box", as far as arithmetic goes.
+type overflowEstimate struct {
+	LinesNeeded     int     `json:"lines_needed"`
+	LinesFit        int     `json:"lines_fit"`
+	NeededHeightEMU float64 `json:"needed_height_emu"`
+	BoxHeightEMU    float64 `json:"box_height_emu"`
+	Note            string  `json:"note"`
+}
+
+const (
+	// textInsetEMU is the padding Slides puts between a shape's edge and its text, on each
+	// side: a tenth of an inch, the default every new shape gets.
+	textInsetEMU = 91440
+	// averageGlyphWidth is how wide a character is against its font size, taken across a
+	// line of ordinary prose in a proportional font. Latin and Cyrillic both sit near half.
+	averageGlyphWidth = 0.5
+	// lineHeightFactor is a line's height against its font size at single spacing.
+	lineHeightFactor = 1.2
+	// overflowSlack keeps the estimate quiet about a box that is a hair short: the numbers
+	// above are averages, and a report on every tight title would be noise.
+	overflowSlack = 1.1
+)
+
+// estimateOverflow says whether a shape's text is taller than the shape, by counting.
+//
+// The API has no field for this. A shape reports its size and its text, and whether the
+// text ran out of the bottom is known only to the renderer — so a slide can be read back
+// clean and still show a paragraph hanging below its panel. What can be done from a reading
+// is arithmetic: characters per line from the width and the font size, lines from the
+// characters, height from the lines.
+//
+// It answers only when it has the numbers. A run that carries no font size of its own takes
+// it from the layout, which this reading does not hold, and guessing one would turn a hint
+// into a rumour — such a shape gets no estimate at all. Nor does a shape set to grow with
+// its text, which cannot overflow by construction. And it speaks only when the answer is
+// "does not fit": a box reported as fitting on these averages would be believed.
+func estimateOverflow(shape *google.Shape, widthEMU, heightEMU float64) *overflowEstimate {
+	if shape == nil || shape.Text == nil || widthEMU <= 0 || heightEMU <= 0 {
+		return nil
+	}
+
+	scale := 1.0
+	if properties := shape.Properties; properties != nil && properties.Autofit != nil {
+		switch properties.Autofit.AutofitType {
+		case "SHAPE_AUTOFIT":
+			return nil
+		case "TEXT_AUTOFIT":
+			if properties.Autofit.FontScale > 0 {
+				scale = properties.Autofit.FontScale
+			}
+		}
+	}
+
+	usableWidth := (widthEMU - 2*textInsetEMU) / google.EMUPerPoint
+	usableHeight := (heightEMU - 2*textInsetEMU) / google.EMUPerPoint
+	if usableWidth <= 0 || usableHeight <= 0 {
+		return nil
+	}
+
+	// One paragraph at a time: its length in characters and the largest size any of its
+	// runs carries, because the tallest run sets the line.
+	type paragraph struct {
+		characters int
+		size       float64
+		sized      bool
+	}
+
+	var paragraphs []paragraph
+	current := paragraph{sized: true}
+	started := false
+
+	for _, element := range shapeElements(shape) {
+		run := element.TextRun
+		if run == nil {
+			continue
+		}
+
+		size := 0.0
+		if run.Style != nil && run.Style.FontSize != nil {
+			size = run.Style.FontSize.InPoints()
+		}
+
+		for _, piece := range strings.SplitAfter(run.Content, "\n") {
+			if piece == "" {
+				continue
+			}
+			started = true
+
+			text := strings.TrimSuffix(piece, "\n")
+			if text != "" {
+				current.characters += len([]rune(text))
+				if size > 0 {
+					current.size = math.Max(current.size, size)
+				} else {
+					current.sized = false
+				}
+			}
+
+			if strings.HasSuffix(piece, "\n") {
+				paragraphs = append(paragraphs, current)
+				current = paragraph{sized: true}
+				started = false
+			}
+		}
+	}
+	if started {
+		paragraphs = append(paragraphs, current)
+	}
+
+	// An empty paragraph is a line of the size around it; with nothing around it to take a
+	// size from, there is no text to overflow.
+	fallback := 0.0
+	for _, one := range paragraphs {
+		if one.characters == 0 {
+			continue
+		}
+		if !one.sized || one.size <= 0 {
+			return nil
+		}
+		fallback = math.Max(fallback, one.size)
+	}
+	if fallback == 0 {
+		return nil
+	}
+
+	lines, needed := 0, 0.0
+	for _, one := range paragraphs {
+		size := one.size
+		if one.characters == 0 {
+			size = fallback
+		}
+		size *= scale
+
+		perLine := int(usableWidth / (size * averageGlyphWidth))
+		if perLine < 1 {
+			perLine = 1
+		}
+
+		count := 1
+		if one.characters > 0 {
+			count = (one.characters + perLine - 1) / perLine
+		}
+
+		lines += count
+		needed += float64(count) * size * lineHeightFactor
+	}
+
+	if needed <= usableHeight*overflowSlack {
+		return nil
+	}
+
+	fit := int(usableHeight / (needed / float64(lines)))
+
+	return &overflowEstimate{
+		LinesNeeded:     lines,
+		LinesFit:        fit,
+		NeededHeightEMU: math.Round(needed * google.EMUPerPoint),
+		BoxHeightEMU:    math.Round(usableHeight * google.EMUPerPoint),
+		Note: "an estimate from character counts and font sizes, not a measurement: look at the " +
+			"render with gdocs_slides_export_thumbnail before changing anything",
+	}
 }
 
 // composeTransforms applies a child's transform inside its parent's.
@@ -913,18 +1098,39 @@ func (r *registry) slidesDuplicate(ctx context.Context, req mcp.CallToolRequest)
 			len(names), copies)), nil
 	}
 
-	requests := make([]google.Request, 0, copies)
-	for index := 0; index < copies; index++ {
-		duplicate := &google.DuplicateObjectRequest{ObjectID: objectID}
-		if index < len(names) && names[index] != "" {
-			duplicate.ObjectIDs = map[string]string{objectID: names[index]}
-		}
-		requests = append(requests, google.Request{DuplicateObject: duplicate})
-	}
-
 	client, err := r.client(ctx)
 	if err != nil {
 		return toolError(err), nil
+	}
+
+	// What the original holds is read first, for one reason: a duplicate's reply names the
+	// copy and nothing inside it. A slide duplicated to be filled in again arrives with a
+	// title, a table and a chart under identifiers nobody was told, and the next call has to
+	// read the slide back to learn them. Naming them here, in the request, makes the map
+	// exact — it is what was asked for rather than a pairing guessed from order.
+	presentation, err := client.Presentation(ctx, presentationID, duplicateMask)
+	if err != nil {
+		return toolError(err), nil
+	}
+	inside := containedIDs(presentation, objectID)
+
+	requests := make([]google.Request, 0, copies)
+	maps := make([]map[string]string, 0, copies)
+	for index := 0; index < copies; index++ {
+		assigned := map[string]string{}
+		for _, contained := range inside {
+			assigned[contained] = r.objectID("copy")
+		}
+		if index < len(names) && names[index] != "" {
+			assigned[objectID] = names[index]
+		}
+
+		duplicate := &google.DuplicateObjectRequest{ObjectID: objectID}
+		if len(assigned) > 0 {
+			duplicate.ObjectIDs = assigned
+		}
+		requests = append(requests, google.Request{DuplicateObject: duplicate})
+		maps = append(maps, assigned)
 	}
 
 	response, err := client.SlidesBatchUpdate(ctx, presentationID, requests)
@@ -933,9 +1139,16 @@ func (r *registry) slidesDuplicate(ctx context.Context, req mcp.CallToolRequest)
 	}
 
 	made := make([]string, 0, len(response.Replies))
-	for _, reply := range response.Replies {
-		if reply.DuplicateObject != nil {
-			made = append(made, reply.DuplicateObject.ObjectID)
+	for index, reply := range response.Replies {
+		if reply.DuplicateObject == nil {
+			continue
+		}
+		made = append(made, reply.DuplicateObject.ObjectID)
+
+		// The copy itself is in the map under whatever it ended up being called: the name
+		// asked for, or the one Google invented when none was.
+		if index < len(maps) && reply.DuplicateObject.ObjectID != "" {
+			maps[index][objectID] = reply.DuplicateObject.ObjectID
 		}
 	}
 
@@ -943,9 +1156,68 @@ func (r *registry) slidesDuplicate(ctx context.Context, req mcp.CallToolRequest)
 		"presentation_id": response.PresentationID,
 		"copied":          objectID,
 		"new_object_ids":  made,
+		"id_maps":         maps,
 		"note": "each copy sits exactly on top of the original; " +
-			"move it with gdocs_slides_place_element",
+			"move it with gdocs_slides_place_element. id_maps holds, per copy, each original " +
+			"identifier against its duplicate's",
 	})
+}
+
+// duplicateMask reads the identifiers of everything on every slide, groups three deep.
+//
+// A field mask cannot say "recursively", so the depth is spelled out; three is one more
+// than the decks this was built against contain. A member deeper than that is still
+// duplicated — it only gets an identifier Google invents, and is missing from the map.
+const duplicateMask = "slides(objectId,pageElements(objectId,elementGroup(children(objectId," +
+	"elementGroup(children(objectId,elementGroup(children(objectId))))))))"
+
+// containedIDs lists what a slide or an element holds inside it: every element of a slide,
+// every member of a group, however nested the reading reached. Nothing for an element that
+// holds nothing, and nothing for an identifier the slides do not have — a shape on a layout
+// duplicates as before, with no map beyond itself.
+func containedIDs(presentation *google.Presentation, objectID string) []string {
+	var collect func(elements []google.PageElement, into *[]string)
+	collect = func(elements []google.PageElement, into *[]string) {
+		for index := range elements {
+			*into = append(*into, elements[index].ObjectID)
+			if group := elements[index].ElementGroup; group != nil {
+				collect(group.Children, into)
+			}
+		}
+	}
+
+	var find func(elements []google.PageElement) (*google.PageElement, bool)
+	find = func(elements []google.PageElement) (*google.PageElement, bool) {
+		for index := range elements {
+			if elements[index].ObjectID == objectID {
+				return &elements[index], true
+			}
+			if group := elements[index].ElementGroup; group != nil {
+				if found, ok := find(group.Children); ok {
+					return found, true
+				}
+			}
+		}
+
+		return nil, false
+	}
+
+	var inside []string
+	for index := range presentation.Slides {
+		page := &presentation.Slides[index]
+		if page.ObjectID == objectID {
+			collect(page.PageElements, &inside)
+			return inside
+		}
+		if found, ok := find(page.PageElements); ok {
+			if found.ElementGroup != nil {
+				collect(found.ElementGroup.Children, &inside)
+			}
+			return inside
+		}
+	}
+
+	return nil
 }
 
 func (r *registry) slidesHide(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

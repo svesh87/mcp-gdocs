@@ -56,7 +56,14 @@ func (r *registry) registerSlidesCopy(srv *server.MCPServer) {
 			"out in the target's own fonts and colours. The answer names everything that could not be "+
 			"carried; read it, because a slide reported as copied with two omissions is not the same "+
 			"slide. Naming the same presentation as source and target is allowed and does something "+
-			"different: Google duplicates the slide, which is exact and loses nothing at all."),
+			"different: Google duplicates the slide, which is exact and loses nothing at all. "+
+			"The answer says which of the two happened in method. \"rebuild\" is the copy between "+
+			"decks described above: the elements were created anew from a reading, and not_carried "+
+			"lists what was left behind. \"duplicate\" is the copy inside one deck: Slides' own "+
+			"duplicateObject made the slide, nothing was read and recreated, so layout_name is not "+
+			"consulted, the placeholders keep their tie to the layout, and a linked chart stays "+
+			"linked. Either way id_map gives each element's identifier on the source slide against "+
+			"the one its copy has, so the copy can be edited without reading the new slide back."),
 		mcp.WithString("source_presentation_id", mcp.Required(), mcp.Description("Deck to copy from.")),
 		mcp.WithString("source_page_object_id", mcp.Required(), mcp.Description("Slide to copy.")),
 		mcp.WithString("target_presentation_id", mcp.Required(), mcp.Description("Deck to copy into.")),
@@ -88,6 +95,20 @@ func (r *registry) registerSlidesCopy(srv *server.MCPServer) {
 type copied struct {
 	requests []google.Request
 	lost     []string
+	// ids is each source element's identifier against the one its copy was created under.
+	// An element that could not be carried is not in it.
+	ids map[string]string
+}
+
+// made records that a source element was built again under a new identifier.
+func (c *copied) made(sourceID, copyID string) {
+	if sourceID == "" || copyID == "" {
+		return
+	}
+	if c.ids == nil {
+		c.ids = map[string]string{}
+	}
+	c.ids[sourceID] = copyID
 }
 
 func (c *copied) lose(what string) {
@@ -228,6 +249,8 @@ func (r *registry) slidesCopySlide(ctx context.Context, req mcp.CallToolRequest)
 		"layout":                 layoutName,
 		"elements":               len(page.PageElements),
 		"requests":               len(work.requests),
+		"method":                 "rebuild",
+		"id_map":                 idMapOf(work, sourcePage, newID),
 	}
 
 	// The notes are a second batch and cannot be anything else: they live on a page behind
@@ -257,10 +280,30 @@ func (r *registry) duplicateSlide(ctx context.Context, client *google.Client, pr
 	page *google.Page, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	copyID := r.objectID("slide")
 
+	// Every element is named in the request, not only the slide. duplicateObject answers
+	// with the new slide's identifier and nothing about what is on it, so a slide copied in
+	// order to be filled in again would have to be read back before its title could be
+	// addressed. Naming the copies here is what makes the map in the answer exact. The
+	// reading holds groups one level deep; a member deeper than that is duplicated all the
+	// same and gets an identifier Google invents.
+	assigned := map[string]string{page.ObjectID: copyID}
+	for index := range page.PageElements {
+		element := &page.PageElements[index]
+		assigned[element.ObjectID] = r.objectID("copy")
+		if element.ElementGroup == nil {
+			continue
+		}
+		for _, child := range element.ElementGroup.Children {
+			if child.ObjectID != "" {
+				assigned[child.ObjectID] = r.objectID("copy")
+			}
+		}
+	}
+
 	requests := []google.Request{{
 		DuplicateObject: &google.DuplicateObjectRequest{
 			ObjectID:  page.ObjectID,
-			ObjectIDs: map[string]string{page.ObjectID: copyID},
+			ObjectIDs: assigned,
 		},
 	}}
 
@@ -286,6 +329,7 @@ func (r *registry) duplicateSlide(ctx context.Context, client *google.Client, pr
 			newID = reply.DuplicateObject.ObjectID
 		}
 	}
+	assigned[page.ObjectID] = newID
 
 	return resultJSON(map[string]any{
 		"source_presentation_id": presentationID,
@@ -296,11 +340,24 @@ func (r *registry) duplicateSlide(ctx context.Context, client *google.Client, pr
 		"requests":               len(requests),
 		"carried_whole":          true,
 		"method":                 "duplicate",
+		"id_map":                 assigned,
 		"note": "the source and the target are the same deck, so Google duplicated the slide " +
 			"rather than this server rebuilding it: everything came across, including what a " +
 			"rebuild cannot reach — an authored corner radius, a drawing, a group, a chart's link " +
-			"to its workbook, and the speaker notes",
+			"to its workbook, and the speaker notes. id_map holds each original identifier against " +
+			"its duplicate's",
 	})
+}
+
+// idMapOf is the map a rebuild answers with: the slide itself and every element that was
+// built again, each against its new identifier.
+func idMapOf(work *copied, sourcePageID, newPageID string) map[string]string {
+	ids := map[string]string{sourcePageID: newPageID}
+	for source, made := range work.ids {
+		ids[source] = made
+	}
+
+	return ids
 }
 
 // carryNotes writes the sample's speaker notes onto the slide just created.
@@ -404,6 +461,7 @@ func (r *registry) slidesCopyElement(ctx context.Context, req mcp.CallToolReques
 		"source_object_id":       objectID,
 		"target_presentation_id": targetID,
 		"target_page_object_id":  targetPage,
+		"object_id":              work.ids[objectID],
 		"requests":               len(work.requests),
 	}, work.lost))
 }
@@ -417,6 +475,7 @@ func (r *registry) slidesCopyElement(ctx context.Context, req mcp.CallToolReques
 // set explicitly.
 func (r *registry) fillPlaceholder(element *google.PageElement, objectID string, work *copied) {
 	shape := element.Shape
+	work.made(element.ObjectID, objectID)
 
 	if fill, outline, alignment, fields := shapeLook(shape); len(fields) > 0 {
 		work.requests = append(work.requests, google.Request{
@@ -487,9 +546,11 @@ func (r *registry) rebuild(element *google.PageElement, pageObjectID string, wor
 	case element.Line != nil:
 		r.rebuildLine(element, properties, work)
 	case element.SheetsChart != nil:
+		chartObjectID := r.objectID("chart")
+		work.made(element.ObjectID, chartObjectID)
 		work.requests = append(work.requests, google.Request{
 			CreateSheetsChart: &google.CreateSheetsChartRequest{
-				ObjectID:      r.objectID("chart"),
+				ObjectID:      chartObjectID,
 				Element:       properties,
 				SpreadsheetID: element.SheetsChart.SpreadsheetID,
 				ChartID:       element.SheetsChart.ChartID,
@@ -497,9 +558,11 @@ func (r *registry) rebuild(element *google.PageElement, pageObjectID string, wor
 			},
 		})
 	case element.Video != nil:
+		videoObjectID := r.objectID("video")
+		work.made(element.ObjectID, videoObjectID)
 		work.requests = append(work.requests, google.Request{
 			CreateVideo: &google.CreateVideoRequest{
-				ObjectID: r.objectID("video"),
+				ObjectID: videoObjectID,
 				Element:  properties,
 				Source:   element.Video.Source,
 				ID:       element.Video.ID,
@@ -520,6 +583,7 @@ func (r *registry) rebuild(element *google.PageElement, pageObjectID string, wor
 func (r *registry) rebuildShape(element *google.PageElement, properties *google.ElementProperties, work *copied) {
 	shape := element.Shape
 	objectID := r.objectID("shape")
+	work.made(element.ObjectID, objectID)
 
 	shapeType := shape.ShapeType
 	if shapeType == "" {
@@ -563,6 +627,7 @@ func (r *registry) rebuildShape(element *google.PageElement, properties *google.
 func (r *registry) rebuildTable(element *google.PageElement, properties *google.ElementProperties, work *copied) {
 	table := element.Table
 	objectID := r.objectID("table")
+	work.made(element.ObjectID, objectID)
 
 	work.requests = append(work.requests, google.Request{
 		CreateTable: &google.CreateTableRequest{
@@ -642,6 +707,7 @@ func (r *registry) rebuildImage(element *google.PageElement, properties *google.
 	}
 
 	objectID := r.objectID("image")
+	work.made(element.ObjectID, objectID)
 
 	// Google fetches the address itself and keeps its own copy of the bytes. The address is
 	// short-lived and tagged with the account that read it, which is why reading and writing
@@ -689,6 +755,7 @@ func (r *registry) rebuildImage(element *google.PageElement, properties *google.
 func (r *registry) rebuildLine(element *google.PageElement, properties *google.ElementProperties, work *copied) {
 	line := element.Line
 	objectID := r.objectID("line")
+	work.made(element.ObjectID, objectID)
 
 	category := line.LineCategory
 	if category == "" {

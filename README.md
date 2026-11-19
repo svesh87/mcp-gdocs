@@ -52,6 +52,10 @@ None of it is on by default. Every removing tool lives in a group of its own —
 `slides-delete`, `docs-delete`, `sheets-delete`, `drive-delete` — and a configuration that
 wants one names it: `--tools=all,docs-delete`. The same is true of sharing, which is the
 one thing here that makes something visible outside the account and lives in `drive-share`.
+One tool outside Drive's own family leans on that switch: `gdocs_slides_insert_image` given
+a file rather than an address uploads the picture and opens it to anyone with the link for
+the moment Slides fetches it, then takes the link back — which is sharing, however brief,
+so it works only on a server whose `--tools` names `drive-share`.
 
 Removing a whole page takes a second switch on top: `slides-delete-page` for a slide,
 `sheets-delete-tab` and `docs-delete-tab` for a tab. The line is what a mistake costs — a
@@ -230,7 +234,7 @@ Slides, the content of a deck:
 | `gdocs_slides_create_table_with_text` | a real table with widths, fonts, colours and alignment |
 | `gdocs_slides_update_table_cells` | new values in a table that already exists, keeping its widths and styling |
 | `gdocs_slides_style_table` | merge cells, fill them, align their content, set row heights |
-| `gdocs_slides_insert_image` | put a picture on a slide by address |
+| `gdocs_slides_insert_image` | put a picture on a slide, by address or from a file in the files directory |
 | `gdocs_slides_create_shape` | a text box, or a panel, arrow or circle, with its text, fill and outline |
 | `gdocs_slides_create_line` | a line, an arrow or a connector |
 | `gdocs_slides_set_speaker_notes` | replace the notes behind a slide |
@@ -316,7 +320,7 @@ Sheets, Docs and Drive:
 | `gdocs_slides_replace_shapes_with_chart` | the same, with a chart from a workbook |
 | `gdocs_slides_set_alt_text` | the description a screen reader reads out |
 | `gdocs_slides_route_line` | how a connector runs, and rerouting it after the shapes moved |
-| `gdocs_slides_add_sheets_chart`, `gdocs_slides_refresh_sheets_chart` | a live chart from a workbook |
+| `gdocs_slides_add_sheets_chart`, `gdocs_slides_refresh_sheets_chart` | a chart from a workbook, linked to it — and brought up to date only when refreshed |
 | `gdocs_slides_add_video` | a video from YouTube or Drive, with how it plays |
 | `gdocs_sheets_move_range` | copy or move a rectangle: values, formatting, formulas, validation |
 | `gdocs_sheets_paste_text` | paste delimited text or an HTML table, split on Google's side |
@@ -491,6 +495,7 @@ mcp-gdocs --credentials /config/gcp-oauth.keys.json --token-dir /config/tokens -
 | `--token-dir` | directory the token lives in. Required |
 | `--scopes` | scopes to ask for, comma separated. Empty means `drive`, `spreadsheets`, `presentations`, `documents` |
 | `--allow-write` | register the tools that change documents. Off by default |
+| `--files-dir` | the one directory exports are written to and imports read from. Empty (default) means the file tools are not offered; see [Exchanging files](#exchanging-files) |
 | `--public-url` | absolute external address behind a gateway, e.g. `https://mcp.example.com/gdocs`. Empty (default) means the loopback sign-in. Only with `streamable-http`; see [Behind a gateway](#behind-a-gateway) |
 | `--access-team-domain`, `--access-aud`, `--access-email` | the Cloudflare Access check of the sign-in pages: all three or none, only with `--public-url`. Empty (default) means no check; see [Behind Cloudflare Access](#behind-cloudflare-access) |
 | `--version` | print the version and exit |
@@ -520,6 +525,35 @@ docker run --rm -i --user "$(id -u):$(id -g)" \
 The image is `FROM scratch` and runs as 65532, so whoever mounts a token directory
 overrides the user with their own identifier — otherwise the directory is not writable
 and the server exits saying so.
+
+### Exchanging files
+
+A deck exported to PDF, a slide rendered to a picture, a `.pptx` on its way in — files
+cross between the server and whoever called it through one directory, the one named in
+`--files-dir`, and nowhere else. Every file argument is a name inside it, and anything
+leading outside is refused.
+
+The directory has two names, and the difference is the usual reason an agent cannot find
+what it just exported. A server in a container sees the directory where it was mounted —
+`/files` by convention — and answers with paths under that. The client that called the tool
+sees the same directory under its own name on the host; clients keep that name in
+`GDOCS_FILES_DIR`.
+
+```bash
+docker run --rm -i --user "$(id -u):$(id -g)" \
+  -e GOOGLE_OAUTH_CLIENT_ID -e GOOGLE_OAUTH_CLIENT_SECRET \
+  -v "$HOME/.local/share/mcp-gdocs:/tokens" \
+  -v "$GDOCS_FILES_DIR:/files" \
+  ghcr.io/svesh87/mcp-gdocs:latest \
+  --token-dir /tokens --allow-write --files-dir /files
+```
+
+So every answer about a file carries both: `path`, the whole path as the server sees it
+(`/files/reports/deck.pdf`), and `relative_path`, the same file named from the directory
+(`reports/deck.pdf`). On the client's side the file is `$GDOCS_FILES_DIR/reports/deck.pdf`,
+and a file the client puts there is imported — or put on a slide as a picture — by passing
+`reports/deck.pdf`. `gdocs_reference` with `topic=files` reports the directory a running
+server uses, and its every answer carries the server's version.
 
 ## The skills
 

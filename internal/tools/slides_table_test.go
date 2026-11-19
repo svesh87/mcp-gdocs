@@ -71,6 +71,29 @@ const presentationWithFilledTable = `{
   "layouts": []
 }`
 
+// presentationWithPlainTable is the same deck with both merges of its table taken apart: the
+// heading no longer spans two columns and the first column no longer spans two rows.
+var presentationWithPlainTable = strings.NewReplacer(
+	`"rowSpan": 1, "columnSpan": 2`, `"rowSpan": 1, "columnSpan": 1`,
+	`"rowSpan": 2, "columnSpan": 1`, `"rowSpan": 1, "columnSpan": 1`,
+).Replace(presentationWithFilledTable)
+
+// TestDeleteTableBandLeavesAMergedHeadingAlone: only a merge along the direction of the
+// removal is in the way. A heading merged across a row is one row tall, and taking a row out
+// from under it — or the heading's own row — removes exactly the rows asked for.
+func TestDeleteTableBandLeavesAMergedHeadingAlone(t *testing.T) {
+	h := newHarness(t, newFakeGoogle(t).
+		answer("/presentations/deck:batchUpdate", emptyBatchReply).
+		answer("/presentations/deck", presentationWithFilledTable))
+
+	answer := h.ok(h.registry.slidesDelete(context.Background(), request(map[string]any{
+		"presentation_id": "deck", "table_object_id": "table1", "what": "row", "row": 0.0,
+	})))
+	if !strings.Contains(answer, `"rows_left": 2`) {
+		t.Errorf("the heading's row is one row and should come out as one, got %s", answer)
+	}
+}
+
 // TestReadTable pins what a table hands back, because reproducing one in another deck is
 // done from exactly these numbers.
 func TestReadTable(t *testing.T) {
@@ -536,9 +559,12 @@ func TestDelete(t *testing.T) {
 // them: the API removes one row per request, so a band of two is two requests naming the same
 // cell in one batch.
 func TestDeleteTableBand(t *testing.T) {
+	// The same table with its two merges taken apart. A band that runs through a merge is
+	// refused before it is sent — TestDeleteTableBandRefusals walks that — so the requests
+	// pinned here are the ones a table without merges in the way gets.
 	h := newHarness(t, newFakeGoogle(t).
 		answer("/presentations/deck:batchUpdate", emptyBatchReply).
-		answer("/presentations/deck", presentationWithFilledTable))
+		answer("/presentations/deck", presentationWithPlainTable))
 
 	// The table is three rows by two columns.
 	answer := h.ok(h.registry.slidesDelete(context.Background(), request(map[string]any{
@@ -555,10 +581,16 @@ func TestDeleteTableBand(t *testing.T) {
 	checkGolden(t, "delete_table_row.json", h.bodyOf(t, len(h.google.requests)-1))
 
 	// Two rows at once, asked for in the plural gdocs_sheets_delete takes.
-	h.ok(h.registry.slidesDelete(context.Background(), request(map[string]any{
+	answer = h.ok(h.registry.slidesDelete(context.Background(), request(map[string]any{
 		"presentation_id": "deck", "table_object_id": "table1", "what": "rows",
 		"row": 0.0, "column": 1.0, "count": 2.0,
 	})))
+
+	// The shift is said in the answer, in numbers: an agent holding "row 2" from before
+	// this call is holding the wrong row.
+	if !strings.Contains(answer, "what was row 2 is now row 0") {
+		t.Errorf("the answer should say where the rows below went, got %s", answer)
+	}
 
 	checkGolden(t, "delete_table_rows.json", h.bodyOf(t, len(h.google.requests)-1))
 
@@ -630,6 +662,26 @@ func TestDeleteTableBandRefusals(t *testing.T) {
 			name:     "an identifier that is not in the deck",
 			argument: map[string]any{"table_object_id": "table9", "what": "row"},
 			refused:  "table9",
+		},
+		{
+			// The first column is merged down rows 1 and 2. deleteTableRow removes every
+			// row the cell it names spans, so asking for row 2 could take row 1 as well.
+			name:     "a row through a cell merged down two rows",
+			argument: map[string]any{"table_object_id": "table1", "what": "row", "row": 2.0, "column": 1.0},
+			refused:  "row 1 column 0 of table1 covers rows 1 to 2",
+		},
+		{
+			// The way out is in the refusal, with the numbers already filled in.
+			name:     "the same, naming the head row of the merge",
+			argument: map[string]any{"table_object_id": "table1", "what": "row", "row": 1.0},
+			refused:  "what=unmerge row=1 column=0 row_span=2 column_span=1",
+		},
+		{
+			// The heading is merged across both columns, which is the same hazard turned
+			// on its side.
+			name:     "a column through a cell merged across two columns",
+			argument: map[string]any{"table_object_id": "table1", "what": "column", "row": 1.0, "column": 1.0},
+			refused:  "covers columns 0 to 1",
 		},
 		{
 			name:     "an element that is not a table",

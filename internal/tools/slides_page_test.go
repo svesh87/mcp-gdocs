@@ -460,7 +460,9 @@ func TestDuplicateMakesEveryCopyFromTheOriginal(t *testing.T) {
 		"new_object_ids":  []any{"panel_a", "panel_b"},
 	})))
 
-	checkGolden(t, "duplicate_object.json", h.bodyOf(t, 0))
+	// Request 0 reads what the original holds, so that a slide's elements can be named in
+	// the copy; a shape holds nothing, so the batch that follows is the one it always was.
+	checkGolden(t, "duplicate_object.json", h.bodyOf(t, 1))
 
 	// The identifiers come back because the next call has to address the copies, and the
 	// third one is Google's own: naming fewer than were asked for is allowed.

@@ -231,18 +231,7 @@ func (r *registry) driveListPermissions(ctx context.Context, req mcp.CallToolReq
 		return toolError(err), nil
 	}
 
-	described := make([]map[string]any, 0, len(permissions))
-	openToAnyone := false
-	for _, permission := range permissions {
-		if permission.Type == "anyone" {
-			openToAnyone = true
-		}
-		entry := map[string]any{"id": permission.ID, "type": permission.Type, "role": permission.Role}
-		putString(entry, "email", permission.EmailAddress)
-		putString(entry, "domain", permission.Domain)
-		putString(entry, "name", permission.DisplayName)
-		described = append(described, entry)
-	}
+	described, openToAnyone := describePermissions(permissions)
 
 	return resultJSON(map[string]any{
 		"file_id":                  fileID,

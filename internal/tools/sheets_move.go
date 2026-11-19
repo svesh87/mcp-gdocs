@@ -88,13 +88,26 @@ func (r *registry) registerSheetsMove(srv *server.MCPServer) {
 	srv.AddTool(mcp.NewTool("gdocs_sheets_append_rows",
 		mcp.WithDescription("Add rows after the last one that has anything in it. gdocs_sheets_append "+
 			"writes values through the other API; this one goes through the batch, so it appends to the "+
-			"grid itself and is the one to use when the tab's own shape matters."),
+			"grid itself and is the one to use when the tab's own shape matters. "+
+			"A chart does not grow with the rows under it: its ranges were fixed when it was drawn, so "+
+			"rows appended below them are in the tab and missing from the chart, and nothing reports "+
+			"it. This tool does. The answer lists, under charts, every chart whose range reads this "+
+			"tab and stops at a fixed row; with extend_charts the ones that ended exactly on the last "+
+			"row of data are stretched over the new rows in the same batch, and the rest are named "+
+			"with the reason they were left alone. A chart shown on a slide still has to be refreshed "+
+			"there with gdocs_slides_refresh_sheets_chart."),
 		mcp.WithString("spreadsheet_id", mcp.Required(), mcp.Description(spreadsheetIDHelp)),
 		mcp.WithString("sheet_title", mcp.Required(), mcp.Description("Tab to add to.")),
 		mcp.WithArray("rows", mcp.Required(), mcp.Description(
 			"Rows, each a list of cell values: [[\"2026-08-13\", 42], [\"2026-08-14\", 17]]. "+
 				"A string that starts with = goes in as a formula."),
 			mcp.Items(map[string]any{"type": "array"})),
+		mcp.WithBoolean("extend_charts", mcp.Description(
+			"Stretch the charts of this tab over the appended rows: every chart whose ranges ended on "+
+				"the last row of data before the append gets them moved to the new last row. A chart "+
+				"that stopped short of that row, or runs past it, was pointed where it is on purpose "+
+				"and is left alone — the answer says which, and gdocs_sheets_update_chart moves such "+
+				"a range by hand. Off by default: without it the charts are only reported.")),
 	), r.sheetsAppendRows)
 }
 
@@ -298,22 +311,125 @@ func (r *registry) sheetsAppendRows(ctx context.Context, req mcp.CallToolRequest
 		return toolError(err), nil
 	}
 
-	sheetID, err := r.sheetIDOf(ctx, client, spreadsheetID, title)
+	spreadsheet, err := client.Spreadsheet(ctx, spreadsheetID)
 	if err != nil {
 		return toolError(err), nil
 	}
+	sheetID, ok := spreadsheet.SheetIDByTitle(title)
+	if !ok {
+		return toolError(fmt.Errorf("no tab called %q in this spreadsheet: it has %s",
+			title, strings.Join(spreadsheet.SheetTitles(), ", "))), nil
+	}
 
-	if _, err := client.SheetsBatchUpdate(ctx, spreadsheetID, []google.SheetsRequest{{
+	extend := req.GetBool("extend_charts", false)
+
+	// The charts are looked at only in a workbook that has any: the reading above already
+	// says so, and a tab of plain data should not pay a second request to learn nothing.
+	var reading []chartOnTab
+	for _, sheet := range spreadsheet.Sheets {
+		if len(sheet.Charts) == 0 {
+			continue
+		}
+
+		charts, err := client.ChartSpecs(ctx, spreadsheetID)
+		if err != nil {
+			return toolError(fmt.Errorf("reading the charts of this workbook, to see which of them "+
+				"the new rows would be missing from: %w. Nothing has been appended", err)), nil
+		}
+		reading = chartsReadingTab(charts, sheetID)
+
+		break
+	}
+
+	requests := []google.SheetsRequest{{
 		AppendCells: &google.AppendCellsRequest{SheetID: sheetID, Rows: rows, Fields: "userEnteredValue"},
-	}}); err != nil {
+	}}
+
+	type chartReport struct {
+		ChartID     int    `json:"chart_id"`
+		Title       string `json:"title,omitempty"`
+		RangeEndRow int    `json:"range_end_row"`
+		ExtendedTo  int    `json:"extended_to_row,omitempty"`
+		LeftAlone   string `json:"left_alone,omitempty"`
+	}
+	reports := make([]chartReport, 0, len(reading))
+	extended := 0
+
+	if extend && len(reading) > 0 {
+		// appendCells writes after the last row that holds anything, and does not say which
+		// row that was. The values of the tab, read the plain way, end on that same row.
+		before, err := client.Values(ctx, spreadsheetID, quotedSheet(title), "", "")
+		if err != nil {
+			return toolError(fmt.Errorf("reading %q to find its last row of data, which is where "+
+				"the charts have to end to be extended: %w. Nothing has been appended", title, err)), nil
+		}
+		lastRow := len(before.Values)
+
+		for index := range reading {
+			chart := &reading[index]
+			report := chartReport{ChartID: chart.chartID, Title: chart.title, RangeEndRow: chart.endRow}
+
+			switch {
+			case !chart.sameEnd:
+				report.LeftAlone = "its ranges on this tab stop at different rows, so there is no one " +
+					"block to stretch: move them with gdocs_sheets_update_chart"
+			case chart.endRow != lastRow:
+				report.LeftAlone = fmt.Sprintf("its range stops before row %d and the data ran to "+
+					"row %d, so it was pointed at part of the tab on purpose: move it with "+
+					"gdocs_sheets_update_chart if the new rows belong in it", chart.endRow, lastRow)
+			default:
+				chart.extendTo(lastRow + len(rows))
+				report.ExtendedTo = lastRow + len(rows)
+				extended++
+
+				// The whole specification goes back, changed in one place: updateChartSpec
+				// has no field mask, and a specification rebuilt from the range alone would
+				// be a chart with a range and nothing else.
+				requests = append(requests, google.SheetsRequest{
+					UpdateChartSpec: &google.UpdateChartSpecRequest{ChartID: chart.chartID, Spec: chart.spec},
+				})
+			}
+
+			reports = append(reports, report)
+		}
+	} else {
+		for _, chart := range reading {
+			reports = append(reports, chartReport{
+				ChartID: chart.chartID, Title: chart.title, RangeEndRow: chart.endRow,
+			})
+		}
+	}
+
+	if _, err := client.SheetsBatchUpdate(ctx, spreadsheetID, requests); err != nil {
 		return toolError(err), nil
 	}
 
-	return resultJSON(map[string]any{
+	payload := map[string]any{
 		"spreadsheet_id": spreadsheetID,
 		"sheet_title":    title,
 		"rows":           len(rows),
-	})
+	}
+
+	if len(reports) > 0 {
+		payload["charts"] = reports
+
+		switch {
+		case !extend:
+			payload["warning"] = fmt.Sprintf("%d chart(s) read this tab through a range fixed when "+
+				"they were drawn, so the rows just appended are not in them. range_end_row is the row "+
+				"each stops before, counted from 0. Move a range with gdocs_sheets_update_chart "+
+				"(start_row, end_row and the columns), or pass extend_charts with the next append — "+
+				"do not append these rows again", len(reports))
+		case extended < len(reports):
+			payload["warning"] = fmt.Sprintf("%d of %d chart(s) reading this tab were extended over "+
+				"the new rows; the rest say why not under left_alone", extended, len(reports))
+		}
+
+		payload["note"] = "a chart shown on a slide does not follow the workbook: refresh it there " +
+			"with gdocs_slides_refresh_sheets_chart"
+	}
+
+	return resultJSON(payload)
 }
 
 // cellValueOf turns one JSON value into what a cell holds. A string beginning with "="

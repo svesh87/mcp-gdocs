@@ -35,10 +35,16 @@ func (r *registry) registerSheetsObjects(srv *server.MCPServer) {
 	srv.AddTool(mcp.NewTool("gdocs_sheets_update_chart",
 		mcp.WithDescription("Change a chart that already exists: move it, resize it, give it a border, or "+
 			"replace what it draws. Changing beats making a new one — a chart recreated loses its place "+
-			"on the tab and every reference to it from a slide."),
+			"on the tab and every reference to it from a slide. Only what is named changes: the "+
+			"chart's stored specification is read, the named parts are replaced in it and the whole "+
+			"of it is written back, because Google's request has no field mask and a specification "+
+			"sent with a title alone would be a chart with a title and no data. "+
+			"A slide that shows this chart does not notice: it changes there only when "+
+			"gdocs_slides_refresh_sheets_chart is called."),
 		mcp.WithString("spreadsheet_id", mcp.Required(), mcp.Description(spreadsheetIDHelp)),
 		mcp.WithNumber("chart_id", mcp.Required(), mcp.Description(
-			"Chart identifier, as gdocs_sheets_info reports it.")),
+			"Chart identifier, as gdocs_sheets_info reports it and gdocs_sheets_add_chart answers "+
+				"with it.")),
 		mcp.WithString("sheet_title", mcp.Description("Tab to move it to, or the one it is already on.")),
 		mcp.WithNumber("anchor_row", mcp.Description("Row of the cell it hangs from, from 0.")),
 		mcp.WithNumber("anchor_column", mcp.Description("Column of that cell, from 0.")),

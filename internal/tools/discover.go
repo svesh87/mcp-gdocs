@@ -249,9 +249,37 @@ func (d *discovery) find(ctx context.Context, req mcp.CallToolRequest) (*mcp.Cal
 			"once", err)), nil
 	}
 
+	// "Added" is checked rather than assumed. The call above answering without an error is
+	// the library's word that it tried; what a later call will find is the session's own
+	// list, so that is what is read back. A name missing from it would otherwise be reported
+	// as added, announced to nobody, and refused when called — the silent case this answer
+	// exists to never have.
+	if withTools, ok := session.(server.SessionWithTools); ok {
+		held := withTools.GetSessionTools()
+
+		var missing []string
+		for _, name := range wanted {
+			if _, there := held[name]; !there {
+				missing = append(missing, name)
+			}
+		}
+		if len(missing) > 0 {
+			return toolError(fmt.Errorf("%s could not be added to this session: the server accepted "+
+				"the request and the session does not hold them. They are not in your tool list and "+
+				"will not appear there. Call them through gdocs_call_tool, which reaches every tool "+
+				"this server was started with, whether or not a session holds it",
+				strings.Join(sortedStrings(missing), ", "))), nil
+		}
+	}
+
 	return resultJSON(map[string]any{
 		"added":     described,
 		"available": len(d.catalogue.tools),
+		// Two different facts, kept apart on purpose: the session holds the tools (checked
+		// above), and the client's own list shows them (unknowable from here).
+		"held_by_session":     true,
+		"in_your_tool_list":   "not confirmed — depends on the client re-reading its list",
+		"call_meanwhile_with": "gdocs_call_tool",
 		// What used to stand here said "these are callable now", and that was a promise this
 		// server cannot keep. A tool added to a session is announced to the client, and
 		// whether the client acts on the announcement is the client's business: it has to be

@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -100,10 +101,16 @@ func (r *registry) registerSlidesShape(srv *server.MCPServer) {
 			"kinds, units. Every one of them is an enum of Google's that a caller would otherwise have to "+
 			"guess at, and a guess comes back as \"invalid argument\" naming nothing. "+
 			"Each topic carries the notes that matter when a sample has to be matched — where the API "+
-			"cannot express what a sample does, and what to use instead."),
+			"cannot express what a sample does, and what to use instead. Four topics are not enums but "+
+			"behaviour of the APIs that costs an hour to rediscover: charts (a range that does not grow, "+
+			"a chart on a slide that does not refresh itself), tables (what removing a row does to the "+
+			"indexes and to merged cells), text (paragraphs against lists, the colour of a link) and "+
+			"rendering (what a thumbnail and a PDF show and what they leave out). files says where "+
+			"exported files land and how a client reaches them. Every answer carries server, the "+
+			"version of this build."),
 		mcp.WithString("topic", mcp.Description(
 			"shapes, bullets, arrows, dashes, theme_colors, export_formats, placeholders, units, "+
-				"alignments. Without one, everything.")),
+				"alignments, charts, tables, text, rendering, files. Without one, everything.")),
 		mcp.WithString("family", mcp.Description(
 			"For topic=shapes, one family: rectangles, ovals and circles, arrows, callouts and speech, "+
 				"flowchart, stars, banners and marks, polygons and braces.")),
@@ -399,6 +406,10 @@ var referenceTopics = map[string]any{
 			"odt, txt, html, rtf, epub and pdf; a spreadsheet to xlsx, ods, csv and pdf.",
 		"formats": []string{"pdf", "pptx", "odp", "docx", "odt", "xlsx", "ods", "csv", "txt",
 			"html", "rtf", "epub"},
+		"deck_as_pdf": "A deck exported to pdf is the whole deck in one file, one page per slide, in " +
+			"deck order — the cheapest way to look through every slide at once. Hidden slides are in " +
+			"it too: the export is of the file, not of the slideshow, so page N is slide N counting " +
+			"the hidden ones. Speaker notes are not in it.",
 	},
 	"placeholders": map[string]any{
 		"note": "The slots a layout offers. Filling a placeholder keeps the template's styling; a new " +
@@ -424,10 +435,127 @@ var referenceTopics = map[string]any{
 		"directions": []string{"LEFT_TO_RIGHT", "RIGHT_TO_LEFT"},
 		"baseline":   []string{"NONE", "SUPERSCRIPT", "SUBSCRIPT"},
 	},
+	// The four below are not enums. They are what the APIs do that their reference pages do
+	// not say in one place, each learned by a deck or a workbook coming out wrong; they live
+	// here because this is the one tool every connection has, whichever window it opened.
+	"charts": map[string]any{
+		"chart_id": "A chart is addressed by a number inside its workbook. gdocs_sheets_info lists the " +
+			"charts of every tab with theirs, and gdocs_sheets_add_chart answers with the one it made.",
+		"range_is_fixed": "A chart draws the rows its ranges named when it was made. Rows appended " +
+			"under them are in the tab and not in the chart, and nothing says so. " +
+			"gdocs_sheets_append_rows names the charts that read the tab it appended to, and with " +
+			"extend_charts grows the ones whose ranges ended on the last row; " +
+			"gdocs_sheets_update_chart with start_row and end_row moves a range by hand.",
+		"on_a_slide": "A linked chart on a slide is a snapshot taken when it was put there or last " +
+			"refreshed. Changing the workbook — its numbers, or the chart itself with " +
+			"gdocs_sheets_update_chart — changes nothing on the slide until " +
+			"gdocs_slides_refresh_sheets_chart is called for that element.",
+		"not_linked": "A chart put on a slide with linked=false is a picture. It keeps no thread to the " +
+			"workbook, gdocs_slides_inspect_page reports it as an image with no sheets_chart, and a " +
+			"refresh has nothing to refresh. To bring it up to date put the chart on again with " +
+			"gdocs_slides_add_sheets_chart and same_place_as naming the picture, then take the " +
+			"picture off with gdocs_slides_delete.",
+		"whole_spec": "updateChartSpec has no field mask: what is sent becomes the chart. " +
+			"gdocs_sheets_update_chart reads the stored specification, changes what was named and " +
+			"sends the whole of it back, so a new title does not cost the chart its data.",
+	},
+	"tables": map[string]any{
+		"indexes_shift": "Removing a row of a table on a slide moves every row under it up by one, at " +
+			"once: after rows 2 and 3 are gone, what was row 4 is row 2. A second removal built on the " +
+			"reading that preceded the first removes the wrong row — read the table again with " +
+			"gdocs_slides_read_table, or count from rows_left in the answer. Columns behave the same.",
+		"merged_cells": "deleteTableRow removes every row the cell it names spans, so a row that " +
+			"crosses a cell merged down several rows takes its neighbours with it. " +
+			"gdocs_slides_delete refuses such a removal before sending anything and names the merged " +
+			"cell: take the merge apart with gdocs_slides_edit_table what=unmerge, remove the row, and " +
+			"merge again with gdocs_slides_style_table.",
+		"coordinates": "A cell is addressed by the coordinates it reports, not by its place in its " +
+			"row: a merge takes the cells it swallowed out of the table.",
+	},
+	"text": map[string]any{
+		"paragraphs_are_not_a_list": "Newlines in gdocs_slides_set_text make paragraphs, and that is " +
+			"all they make: no markers and no indents, so several lines read as one run-on block. " +
+			"A list is made by gdocs_slides_set_list, which takes the lines with their levels.",
+		"links": "A link takes the theme's HYPERLINK colour and an underline the moment it is made, " +
+			"in a text box and in a table cell alike, whatever colour the text had. To have it another " +
+			"colour, style the same stretch with gdocs_slides_set_text_style after linking, or change " +
+			"HYPERLINK for the whole deck with gdocs_slides_set_theme_colors.",
+	},
+	"rendering": map[string]any{
+		"thumbnail": "gdocs_slides_export_thumbnail and gdocs_slides_export_images render the slide " +
+			"as the audience sees it. Speaker notes are not on it — read them back with " +
+			"gdocs_slides_inspect_page, which reports speaker_notes.",
+		"overflow": "The API does not say whether text fits its box: a shape reports its size and its " +
+			"text and nothing about how the two met. gdocs_slides_inspect_page adds " +
+			"text_overflow_estimate where its own arithmetic says the text is taller than the box — " +
+			"an estimate from character counts and the font size the runs carry, not a measurement; a " +
+			"box whose font size is inherited from its layout is not estimated at all. The render is " +
+			"what settles it.",
+		"pdf": "gdocs_drive_export_file with format=pdf writes the whole deck, one page per slide, " +
+			"hidden slides included, without the speaker notes.",
+	},
 }
 
 // reference answers with the values a caller cannot know.
 func (r *registry) reference(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	result, err := r.referenceTopic(req)
+	if err != nil || result == nil || result.IsError {
+		return result, err
+	}
+
+	// The build is in every answer rather than under a topic of its own: whoever reads a
+	// transcript in which a tool misbehaved has the version beside the call that showed it.
+	if payload, ok := result.StructuredContent.(map[string]any); ok {
+		payload["server"] = r.serverInfo()
+		return resultJSON(payload)
+	}
+
+	return result, nil
+}
+
+// serverInfo is what this build says about itself.
+func (r *registry) serverInfo() map[string]any {
+	version := r.opts.Version
+	if version == "" {
+		version = "dev"
+	}
+
+	return map[string]any{"name": "mcp-gdocs", "version": version}
+}
+
+// filesTopic says where this server keeps files and how a client reaches them.
+//
+// It is built per call rather than kept in referenceTopics because it carries a fact about
+// this process — the directory it was started with — and because the half that matters is
+// one no reference page could hold: the path in an answer is a path on the server's side.
+func (r *registry) filesTopic() map[string]any {
+	topic := map[string]any{
+		"note": "The file tools — gdocs_drive_export_file, gdocs_drive_download_file, " +
+			"gdocs_slides_export_images, gdocs_drive_import_file and the file argument of " +
+			"gdocs_slides_insert_image — read and write inside one directory, the one the server was " +
+			"started with in --files-dir, and nowhere else. Names are given relative to it.",
+		"two_sides": "A path in an answer is a path as the server sees it. A server in a container " +
+			"sees the directory under the name it was mounted at — /files by convention — while the " +
+			"client that called the tool sees the same directory under its own name on the host; " +
+			"clients keep that name in GDOCS_FILES_DIR. So every answer carries two things: path, the " +
+			"whole path on the server's side, and relative_path, the same file named from the " +
+			"directory. On the client's side the file is at $GDOCS_FILES_DIR/<relative_path>, and a " +
+			"file put at $GDOCS_FILES_DIR/<relative_path> is imported, or inserted as a picture, by " +
+			"passing <relative_path>.",
+	}
+
+	if r.opts.FilesDir == "" {
+		topic["files_dir"] = nil
+		topic["available"] = "this server was started without --files-dir, so the file tools are " +
+			"not offered"
+	} else {
+		topic["files_dir"] = filepath.Clean(r.opts.FilesDir)
+	}
+
+	return topic
+}
+
+func (r *registry) referenceTopic(req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	topic := strings.ToLower(optionalString(req, "topic"))
 	family := strings.ToLower(optionalString(req, "family"))
 
@@ -456,11 +584,15 @@ func (r *registry) reference(_ context.Context, req mcp.CallToolRequest) (*mcp.C
 		return resultJSON(map[string]any{"shapes": found})
 	}
 
+	if topic == "files" {
+		return resultJSON(map[string]any{"files": r.filesTopic()})
+	}
+
 	if topic != "" {
 		entry, ok := referenceTopics[topic]
 		if !ok {
-			names := make([]string, 0, len(referenceTopics)+1)
-			names = append(names, "shapes")
+			names := make([]string, 0, len(referenceTopics)+2)
+			names = append(names, "shapes", "files")
 			for name := range referenceTopics {
 				names = append(names, name)
 			}
@@ -470,7 +602,7 @@ func (r *registry) reference(_ context.Context, req mcp.CallToolRequest) (*mcp.C
 		return resultJSON(map[string]any{topic: entry})
 	}
 
-	everything := map[string]any{"shapes": shapes()}
+	everything := map[string]any{"shapes": shapes(), "files": r.filesTopic()}
 	for name, entry := range referenceTopics {
 		everything[name] = entry
 	}

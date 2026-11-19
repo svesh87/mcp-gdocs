@@ -669,15 +669,40 @@ type UpdateChartSpecRequest struct {
 // colour, a hidden-dimension strategy, a per-series line style — has to survive the round
 // trip. Decoding into a struct is how a chart loses half of itself to a change of title.
 func (c *Client) ChartSpecOf(ctx context.Context, spreadsheetID string, chartID int) (map[string]any, error) {
+	charts, err := c.ChartSpecs(ctx, spreadsheetID)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, chart := range charts {
+		if chart.ChartID == chartID {
+			return chart.Spec, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no chart %d in this spreadsheet: gdocs_sheets_info lists the charts of "+
+		"every tab with their numbers", chartID)
+}
+
+// StoredChart is a chart with its whole specification as Google stores it, untyped for the
+// reason ChartSpecOf gives: it is read in order to be sent back.
+type StoredChart struct {
+	ChartID int            `json:"chartId"`
+	Spec    map[string]any `json:"spec"`
+}
+
+// ChartSpecs reads every chart of a workbook with its whole specification.
+//
+// A chart's ranges live inside the specification and may point at any tab, not only the
+// one the chart floats over, so "which charts read this tab" is a question about all of
+// them at once.
+func (c *Client) ChartSpecs(ctx context.Context, spreadsheetID string) ([]StoredChart, error) {
 	query := url.Values{}
 	query.Set("fields", "sheets(charts)")
 
 	var out struct {
 		Sheets []struct {
-			Charts []struct {
-				ChartID int            `json:"chartId"`
-				Spec    map[string]any `json:"spec"`
-			} `json:"charts"`
+			Charts []StoredChart `json:"charts"`
 		} `json:"sheets"`
 	}
 	if err := c.call(ctx, http.MethodGet,
@@ -685,16 +710,12 @@ func (c *Client) ChartSpecOf(ctx context.Context, spreadsheetID string, chartID 
 		return nil, err
 	}
 
+	var charts []StoredChart
 	for _, sheet := range out.Sheets {
-		for _, chart := range sheet.Charts {
-			if chart.ChartID == chartID {
-				return chart.Spec, nil
-			}
-		}
+		charts = append(charts, sheet.Charts...)
 	}
 
-	return nil, fmt.Errorf("no chart %d in this spreadsheet: gdocs_sheets_info lists the charts of "+
-		"every tab with their numbers", chartID)
+	return charts, nil
 }
 
 // UpdateEmbeddedPosReq moves a chart or a slicer.

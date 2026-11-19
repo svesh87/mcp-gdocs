@@ -156,7 +156,9 @@ func TestSheetsShapeAndAppend(t *testing.T) {
 			h := newHarness(t, newFakeGoogle(t).answer("/spreadsheets/book", spreadsheetForObjects))
 			h.ok(probe.call(h))
 
-			if body := string(h.bodyOf(t, 1)); !strings.Contains(body, probe.want) {
+			// The batch is the last request: before it come the readings, and appending rows
+			// to a workbook that has charts reads those as well.
+			if body := string(h.bodyOf(t, len(h.google.requests)-1)); !strings.Contains(body, probe.want) {
 				t.Errorf("the request should carry %s, got %s", probe.want, body)
 			}
 		})

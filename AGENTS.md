@@ -78,6 +78,11 @@ below are the ones that are expensive to rediscover; the rest of the reasoning i
 - **Text is counted in UTF-16 code units.** `utf16Length` exists for that: for Russian a
   byte count is twice too large, the range lands in the middle of nothing and the API
   refuses the whole batch.
+- **A picture from a file needs `drive-share`.** Slides takes an image only by an address it
+  can fetch, so `gdocs_slides_insert_image` with `file` uploads the file, opens it by link for
+  the insert and closes the link on every way out. Without `drive-share` in `--tools` it
+  refuses rather than leave a file open. The uploaded file stays on Drive, private: removal
+  lives in `drive-delete`, not here.
 
 ## Golden files
 

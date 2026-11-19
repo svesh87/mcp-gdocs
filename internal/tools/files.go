@@ -76,6 +76,30 @@ var uploadTypes = map[string]string{
 	".svg":  "image/svg+xml",
 }
 
+// filesDirHelp says, in every description of a tool that writes a file, where that file is.
+//
+// The answer of such a tool is a path, and a path is only true on one side of a mount. A
+// server in a container writes /files/deck.pdf; the agent that asked reads the same file as
+// something else entirely, and an agent given only the first of the two goes looking for
+// /files on a machine that has no such directory.
+const filesDirHelp = "The answer carries path, the file as the server sees it, and relative_path, " +
+	"the same file named from the files directory. Where the server runs in a container the two " +
+	"sides differ: it sees the directory as it was mounted — /files by convention — and the client " +
+	"sees it under its own name, which clients keep in GDOCS_FILES_DIR, so on the client's side the " +
+	"file is $GDOCS_FILES_DIR/<relative_path>. gdocs_reference topic=files reports the directory " +
+	"this server uses."
+
+// relativePath names a file from the files directory, with forward slashes, which is the
+// form the file arguments take it back in.
+func (r *registry) relativePath(path string) string {
+	relative, err := filepath.Rel(filepath.Clean(r.opts.FilesDir), path)
+	if err != nil {
+		return path
+	}
+
+	return filepath.ToSlash(relative)
+}
+
 // registerFiles adds the tools that move whole files between Google and the disk.
 //
 // They exist only when the server was started with a directory to use. Without one there
@@ -90,7 +114,10 @@ func (r *registry) registerFiles(srv *server.MCPServer) {
 		mcp.WithDescription("Export a presentation, document or spreadsheet to a file on disk: pdf, pptx, docx, "+
 			"xlsx, csv, txt and the rest. gdocs_drive_export hands the content back in the answer, which is "+
 			"fine for a page of text and useless for a deck — a PDF arrives as base64 and blows past the "+
-			"size limit. This writes it into the server's files directory instead and reports the path."),
+			"size limit. This writes it into the server's files directory instead and reports the path. "+
+			"A deck exported to pdf is the whole deck, one page per slide in deck order, hidden slides "+
+			"included and speaker notes left out — the quickest way to look through all of it at once. "+
+			filesDirHelp),
 		mcp.WithString("file_id", mcp.Required(), mcp.Description("File to export.")),
 		mcp.WithString("format", mcp.Required(), mcp.Description(
 			"pdf, pptx, odp, docx, odt, xlsx, ods, csv, txt, html, rtf or epub.")),
@@ -104,7 +131,8 @@ func (r *registry) registerFiles(srv *server.MCPServer) {
 			"anything that was uploaded rather than authored in a Google editor. "+
 			"gdocs_drive_export_file is for the other kind and refuses these — export converts a document, "+
 			"a deck or a spreadsheet and answers \"Export only supports Docs Editors files\" for the rest. "+
-			"Use this to read a brandbook, a media kit or a picture somebody left on the drive."),
+			"Use this to read a brandbook, a media kit or a picture somebody left on the drive. "+
+			filesDirHelp),
 		mcp.WithString("file_id", mcp.Required(), mcp.Description("File to download.")),
 		mcp.WithString("save_as", mcp.Description(
 			"File name inside the server's files directory. Without one, the file's own name on Drive. "+
@@ -115,7 +143,8 @@ func (r *registry) registerFiles(srv *server.MCPServer) {
 		mcp.WithDescription("Render slides to picture files on disk — the whole deck by default, or the ones "+
 			"named. This is how a rebuilt deck gets checked against its sample: gdocs_slides_export_thumbnail "+
 			"renders one slide and hands back an address that expires, and comparing twenty-two of those by "+
-			"hand is where slides get missed."),
+			"hand is where slides get missed. A render is the slide as the audience sees it, so speaker "+
+			"notes are not on it. "+filesDirHelp),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
 		mcp.WithString("name_prefix", mcp.Required(), mcp.Description(
 			"Prefix for the file names inside the files directory; each slide gets its number and .png "+
@@ -133,9 +162,13 @@ func (r *registry) registerFiles(srv *server.MCPServer) {
 		mcp.WithDescription("Upload a file from disk to Drive, converting it into a Google editor format when "+
 			"it is one: a .pptx becomes a real presentation every other tool here can edit, a .xlsx becomes "+
 			"a spreadsheet. Anything else is uploaded as it is. "+
-			"This is the way back in for a deck built elsewhere."),
+			"This is the way back in for a deck built elsewhere. The file has to be in the server's "+
+			"files directory already: a client on the other side of a mount puts it into its own name "+
+			"for that directory — clients keep it in GDOCS_FILES_DIR — and passes the name relative to "+
+			"it. The answer repeats where the server found it."),
 		mcp.WithString("path", mcp.Required(), mcp.Description(
-			"File to upload, named inside the server's files directory.")),
+			"File to upload, named inside the server's files directory — relative to it, not a path "+
+				"on the client's disk.")),
 		mcp.WithString("name", mcp.Description("Name for the file on Drive. Without one, the file's own name.")),
 		mcp.WithString("parent_folder_id", mcp.Description("Folder to put it in. Without one it lands in My Drive.")),
 		mcp.WithBoolean("keep_original_format", mcp.Description(
@@ -189,12 +222,13 @@ func (r *registry) exportFile(ctx context.Context, req mcp.CallToolRequest) (*mc
 	}
 
 	return resultJSON(map[string]any{
-		"file_id":      fileID,
-		"format":       strings.ToLower(format),
-		"mime_type":    mimeType,
-		"content_type": contentType,
-		"path":         path,
-		"bytes":        len(content),
+		"file_id":       fileID,
+		"format":        strings.ToLower(format),
+		"mime_type":     mimeType,
+		"content_type":  contentType,
+		"path":          path,
+		"relative_path": r.relativePath(path),
+		"bytes":         len(content),
 	})
 }
 
@@ -244,10 +278,11 @@ func (r *registry) downloadFile(ctx context.Context, req mcp.CallToolRequest) (*
 	}
 
 	return resultJSON(map[string]any{
-		"file_id":      fileID,
-		"content_type": contentType,
-		"path":         path,
-		"bytes":        len(content),
+		"file_id":       fileID,
+		"content_type":  contentType,
+		"path":          path,
+		"relative_path": r.relativePath(path),
+		"bytes":         len(content),
 	})
 }
 
@@ -294,6 +329,7 @@ func (r *registry) exportSlideImages(ctx context.Context, req mcp.CallToolReques
 		Index        int    `json:"index"`
 		PageObjectID string `json:"page_object_id"`
 		Path         string `json:"path"`
+		RelativePath string `json:"relative_path"`
 		Bytes        int    `json:"bytes"`
 	}
 
@@ -320,7 +356,10 @@ func (r *registry) exportSlideImages(ctx context.Context, req mcp.CallToolReques
 			return toolError(err), nil
 		}
 
-		files = append(files, rendered{Index: index, PageObjectID: page, Path: path, Bytes: len(content)})
+		files = append(files, rendered{
+			Index: index, PageObjectID: page, Path: path,
+			RelativePath: r.relativePath(path), Bytes: len(content),
+		})
 	}
 
 	return resultJSON(map[string]any{
@@ -382,6 +421,8 @@ func (r *registry) importFile(ctx context.Context, req mcp.CallToolRequest) (*mc
 		"mime_type":     file.MimeType,
 		"converted":     target != "",
 		"web_view_link": file.WebViewLink,
+		"path":          path,
+		"relative_path": r.relativePath(path),
 		"bytes":         len(content),
 	})
 }

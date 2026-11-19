@@ -102,12 +102,18 @@ func (r *registry) registerSlidesExtra(srv *server.MCPServer) {
 	srv.AddTool(mcp.NewTool("gdocs_slides_replace_shapes_with_chart",
 		mcp.WithDescription("Turn every shape whose text matches into a chart from a spreadsheet, keeping "+
 			"the shape's place and size. The template says where the chart goes; the workbook says what "+
-			"it shows."),
+			"it shows. What lands on the slide is the chart as it is at this moment: a linked chart "+
+			"does not follow the workbook by itself and shows these numbers until "+
+			"gdocs_slides_refresh_sheets_chart is called for it."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
 		mcp.WithString("contains_text", mcp.Required(), mcp.Description("Text the shape has to contain.")),
 		mcp.WithString("spreadsheet_id", mcp.Required(), mcp.Description("Workbook the chart lives in.")),
-		mcp.WithNumber("chart_id", mcp.Required(), mcp.Description("Chart identifier inside that workbook.")),
-		mcp.WithBoolean("linked", mcp.DefaultBool(true), mcp.Description("Keep it linked so it can be refreshed.")),
+		mcp.WithNumber("chart_id", mcp.Required(), mcp.Description(
+			"Chart identifier inside that workbook, as gdocs_sheets_info lists it and "+
+				"gdocs_sheets_add_chart answers with it.")),
+		mcp.WithBoolean("linked", mcp.DefaultBool(true), mcp.Description(
+			"Keep it linked so it can be refreshed. False puts a picture there instead: it has no "+
+				"thread back to the workbook and no refresh will ever change it.")),
 		mcp.WithBoolean("match_case", mcp.DefaultBool(true), mcp.Description("Match upper and lower case exactly.")),
 		mcp.WithArray("page_object_ids", mcp.WithStringItems(), mcp.Description(
 			"Limit to these slides. Without them, the whole deck.")),
@@ -138,14 +144,25 @@ func (r *registry) registerSlidesExtra(srv *server.MCPServer) {
 
 	srv.AddTool(mcp.NewTool("gdocs_slides_add_sheets_chart",
 		mcp.WithDescription("Put a chart from a spreadsheet onto a slide. Linked, it keeps a thread back to "+
-			"the workbook and is brought up to date with refresh=true later; not linked, it is a picture "+
-			"of the chart as it is now. The chart identifier comes from gdocs_sheets_info."),
+			"the workbook — and that thread is pulled by hand: the slide shows the chart as it was when "+
+			"it was put there, and changes only when gdocs_slides_refresh_sheets_chart is called, "+
+			"however the workbook has changed since. Not linked, it is a picture of the chart as it is "+
+			"now, with no thread at all: nothing refreshes it, and gdocs_slides_inspect_page reports "+
+			"it as an image. The way to bring such a picture up to date is to put the chart on again "+
+			"in its place — same_place_as does that — and remove the picture. The chart identifier "+
+			"comes from gdocs_sheets_info or from the answer of gdocs_sheets_add_chart."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
-		mcp.WithString("page_object_id", mcp.Required(), mcp.Description("Slide to put it on.")),
+		mcp.WithString("page_object_id", mcp.Description(
+			"Slide to put it on. Required unless same_place_as names an element, whose slide is used.")),
 		mcp.WithString("spreadsheet_id", mcp.Required(), mcp.Description("Workbook the chart lives in.")),
 		mcp.WithNumber("chart_id", mcp.Required(), mcp.Description("Chart identifier inside that workbook.")),
 		mcp.WithBoolean("linked", mcp.DefaultBool(true), mcp.Description(
 			"Keep it linked to the workbook so it can be refreshed.")),
+		mcp.WithString("same_place_as", mcp.Description(
+			"An element already on a slide — the stale picture of this chart, usually — whose slide, "+
+				"size, position and rotation the new chart takes exactly, instead of x_emu, y_emu, "+
+				"width_emu and height_emu. That element is left where it is, under the new chart: this "+
+				"tool removes nothing, so take it off with gdocs_slides_delete afterwards.")),
 		mcp.WithNumber("x_emu", mcp.Description("Left edge in EMU.")),
 		mcp.WithNumber("y_emu", mcp.Description("Top edge in EMU.")),
 		mcp.WithNumber("width_emu", mcp.Description("Width in EMU.")),
@@ -154,9 +171,15 @@ func (r *registry) registerSlidesExtra(srv *server.MCPServer) {
 
 	srv.AddTool(mcp.NewTool("gdocs_slides_refresh_sheets_chart",
 		mcp.WithDescription("Pull the current state of a linked chart from its workbook. A deck built last "+
-			"quarter shows last quarter's numbers until this is called."),
+			"quarter shows last quarter's numbers until this is called — a linked chart never updates "+
+			"itself, whether the workbook's numbers changed or the chart was restyled with "+
+			"gdocs_sheets_update_chart. It works on a linked chart only. A chart placed with "+
+			"linked=false is a picture: it has nothing to refresh, and this tool says so rather than "+
+			"passing on Google's refusal. Replace such a picture with gdocs_slides_add_sheets_chart "+
+			"and same_place_as."),
 		mcp.WithString("presentation_id", mcp.Required(), mcp.Description(presentationIDHelp)),
-		mcp.WithString("object_id", mcp.Required(), mcp.Description("Chart on the slide.")),
+		mcp.WithString("object_id", mcp.Required(), mcp.Description(
+			"Chart on the slide — an element gdocs_slides_inspect_page reports with sheets_chart.")),
 	), r.slidesRefreshSheetsChart)
 
 	srv.AddTool(mcp.NewTool("gdocs_slides_add_video",
@@ -606,9 +629,11 @@ func (r *registry) slidesAddSheetsChart(ctx context.Context, req mcp.CallToolReq
 	if err != nil {
 		return toolError(err), nil
 	}
-	pageID, err := requiredString(req, "page_object_id")
-	if err != nil {
-		return toolError(err), nil
+	pageID := optionalString(req, "page_object_id")
+	samePlaceAs := optionalString(req, "same_place_as")
+	if pageID == "" && samePlaceAs == "" {
+		return toolError(fmt.Errorf("page_object_id is required: name the slide, or name an element " +
+			"in same_place_as and the chart goes on its slide, in its place")), nil
 	}
 	spreadsheetID, err := requiredString(req, "spreadsheet_id")
 	if err != nil {
@@ -629,6 +654,50 @@ func (r *registry) slidesAddSheetsChart(ctx context.Context, req mcp.CallToolReq
 		return toolError(err), nil
 	}
 
+	placement := elementPlacement(req, pageID)
+
+	// A chart put on a slide as a picture cannot be refreshed, and the only way to bring it
+	// up to date is to put the chart on again where the picture stands. Doing that by
+	// reading four numbers and passing them back loses the rotation and rounds the rest, so
+	// the place is taken from the element itself: its size and its transform, as stored.
+	if samePlaceAs != "" {
+		for _, name := range []string{"x_emu", "y_emu", "width_emu", "height_emu"} {
+			if _, given := req.GetArguments()[name]; given {
+				return toolError(fmt.Errorf("same_place_as and %s are alternatives: the place comes "+
+					"from the element or from the numbers, not both", name)), nil
+			}
+		}
+
+		presentation, err := client.Presentation(ctx, presentationID,
+			"slides(objectId,pageElements(objectId,size,transform,elementGroup(children(objectId))))")
+		if err != nil {
+			return toolError(err), nil
+		}
+
+		onPage, element, grouped := topLevelElement(presentation, samePlaceAs)
+		switch {
+		case grouped:
+			return toolError(fmt.Errorf("%s is inside a group, so its position is counted from the "+
+				"group and not from the slide: take the group apart with gdocs_slides_group first, "+
+				"or place the chart by x_emu, y_emu, width_emu and height_emu", samePlaceAs)), nil
+		case element == nil:
+			return toolError(fmt.Errorf("no element named %s on any slide of this presentation: "+
+				"read the identifiers with gdocs_slides_inspect_page", samePlaceAs)), nil
+		case pageID != "" && pageID != onPage:
+			return toolError(fmt.Errorf("%s stands on slide %s, not on %s: leave page_object_id out, "+
+				"or name the slide it is on", samePlaceAs, onPage, pageID)), nil
+		case element.Size == nil || element.Transform == nil:
+			return toolError(fmt.Errorf("%s reports no size or no transform, so there is no place "+
+				"to take from it", samePlaceAs)), nil
+		}
+
+		placement = &google.ElementProperties{
+			PageObjectID: onPage,
+			Size:         element.Size,
+			Transform:    element.Transform,
+		}
+	}
+
 	objectID := r.objectID("chart")
 
 	if _, err := client.SlidesBatchUpdate(ctx, presentationID, []google.Request{{
@@ -637,17 +706,61 @@ func (r *registry) slidesAddSheetsChart(ctx context.Context, req mcp.CallToolReq
 			SpreadsheetID: spreadsheetID,
 			ChartID:       chartID,
 			LinkingMode:   linking,
-			Element:       elementPlacement(req, pageID),
+			Element:       placement,
 		},
 	}}); err != nil {
 		return toolError(err), nil
 	}
 
-	return resultJSON(map[string]any{
+	payload := map[string]any{
 		"presentation_id": presentationID,
+		"page_object_id":  placement.PageObjectID,
 		"object_id":       objectID,
 		"linking_mode":    linking,
-	})
+	}
+
+	if linking == "LINKED" {
+		payload["note"] = "the slide shows the chart as it is now and will not follow the workbook: " +
+			"call gdocs_slides_refresh_sheets_chart for " + objectID + " after the numbers or the " +
+			"chart change"
+	} else {
+		payload["note"] = "this is a picture of the chart, not a chart: nothing ties it to the " +
+			"workbook and gdocs_slides_refresh_sheets_chart cannot update it. To bring it up to " +
+			"date later, add the chart again with same_place_as=" + objectID + " and remove this one"
+	}
+
+	if samePlaceAs != "" {
+		payload["same_place_as"] = samePlaceAs
+		payload["still_there"] = samePlaceAs + " was not removed and now lies under the new chart: " +
+			"take it off with gdocs_slides_delete"
+	}
+
+	return resultJSON(payload)
+}
+
+// topLevelElement finds an element standing directly on a slide and says which slide. The
+// third answer is for an identifier that exists but one level down, inside a group, where
+// its transform is relative to the group and means nothing on the slide.
+func topLevelElement(presentation *google.Presentation, objectID string) (string, *google.PageElement, bool) {
+	for pageIndex := range presentation.Slides {
+		page := &presentation.Slides[pageIndex]
+		for index := range page.PageElements {
+			element := &page.PageElements[index]
+			if element.ObjectID == objectID {
+				return page.ObjectID, element, false
+			}
+			if element.ElementGroup == nil {
+				continue
+			}
+			for _, child := range element.ElementGroup.Children {
+				if child.ObjectID == objectID {
+					return page.ObjectID, nil, true
+				}
+			}
+		}
+	}
+
+	return "", nil, false
 }
 
 func (r *registry) slidesRefreshSheetsChart(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -668,10 +781,66 @@ func (r *registry) slidesRefreshSheetsChart(ctx context.Context, req mcp.CallToo
 	if _, err := client.SlidesBatchUpdate(ctx, presentationID, []google.Request{{
 		RefreshSheetsChart: &google.RefreshSheetsChartRequest{ObjectID: objectID},
 	}}); err != nil {
-		return toolError(err), nil
+		return toolError(r.explainRefresh(ctx, client, presentationID, objectID, err)), nil
 	}
 
-	return resultJSON(map[string]any{"presentation_id": presentationID, "object_id": objectID})
+	return resultJSON(map[string]any{
+		"presentation_id": presentationID,
+		"object_id":       objectID,
+		"note": "the chart now shows the workbook as it is at this moment; it will not follow later " +
+			"changes without another refresh",
+	})
+}
+
+// explainRefresh turns Google's refusal to refresh into what is actually wrong, when that
+// can be told.
+//
+// The commonest wrong target is a chart that was placed with linked=false. It looks like a
+// chart and is a picture: it carries no workbook and no chart number, so there is nothing
+// to pull. Google's answer to refreshing one names an invalid object and stops there. The
+// element is looked up only after the refusal, so a refresh that works costs nothing extra.
+func (r *registry) explainRefresh(ctx context.Context, client *google.Client,
+	presentationID, objectID string, refused error) error {
+	presentation, err := client.Presentation(ctx, presentationID,
+		"slides(objectId,pageElements(objectId,image(contentUrl),sheetsChart(spreadsheetId,chartId),"+
+			"elementGroup(children(objectId,image(contentUrl),sheetsChart(spreadsheetId,chartId)))))")
+	if err != nil {
+		return refused
+	}
+
+	var found *google.PageElement
+	for pageIndex := range presentation.Slides {
+		elements := presentation.Slides[pageIndex].PageElements
+		for index := range elements {
+			if elements[index].ObjectID == objectID {
+				found = &elements[index]
+			}
+			if group := elements[index].ElementGroup; group != nil {
+				for child := range group.Children {
+					if group.Children[child].ObjectID == objectID {
+						found = &group.Children[child]
+					}
+				}
+			}
+		}
+	}
+
+	switch {
+	case found == nil:
+		return fmt.Errorf("%w — no element named %s stands on any slide of this presentation: read "+
+			"the identifiers with gdocs_slides_inspect_page", refused, objectID)
+	case found.SheetsChart != nil:
+		return refused
+	case found.Image != nil:
+		return fmt.Errorf("%s is a picture, not a linked chart, so there is nothing to refresh: a "+
+			"chart placed with linked=false keeps no thread to its workbook. Put the chart on again "+
+			"in the same place with gdocs_slides_add_sheets_chart same_place_as=%s, then remove the "+
+			"picture with gdocs_slides_delete (Google said: %w)", objectID, objectID, refused)
+	default:
+		return fmt.Errorf("%s is not a chart from a workbook, so there is nothing to refresh: "+
+			"gdocs_slides_inspect_page reports the charts of a slide with sheets_chart (Google "+
+			"said: %w)", objectID, refused)
+	}
 }
 
 func (r *registry) slidesAddVideo(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

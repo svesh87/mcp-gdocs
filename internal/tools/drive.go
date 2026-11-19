@@ -54,7 +54,11 @@ func (r *registry) registerDrive(srv *server.MCPServer) {
 
 	srv.AddTool(mcp.NewTool("gdocs_drive_copy",
 		mcp.WithDescription("Copy a file on Drive. For a presentation this is how a deck is started from a "+
-			"template; gdocs_slides_copy_presentation is the same thing under a name that says so."),
+			"template; gdocs_slides_copy_presentation is the same thing under a name that says so. "+
+			"A copy does not carry the original's sharing: it belongs to whoever made it and is "+
+			"reachable by them and by whoever the folder it landed in is shared with — which may be "+
+			"more people than the original had, or fewer. So the answer carries the copy's permissions "+
+			"as they actually are, and open_to_anyone_with_link, read back after the copy was made."),
 		mcp.WithString("file_id", mcp.Required(), mcp.Description("File to copy.")),
 		mcp.WithString("name", mcp.Required(), mcp.Description("Name for the copy.")),
 		mcp.WithString("parent_folder_id", mcp.Description("Folder to put it in. Without one it lands beside the original.")),
@@ -204,7 +208,54 @@ func (r *registry) driveCopy(ctx context.Context, req mcp.CallToolRequest) (*mcp
 		return toolError(err), nil
 	}
 
-	return resultJSON(describeFile(*file))
+	described := describeFile(*file)
+	reportAccess(ctx, client, file.ID, described)
+
+	return resultJSON(described)
+}
+
+// reportAccess adds who can reach a file to an answer about it.
+//
+// It exists for the copy. A copy's access is not its original's: the grants on the original
+// stay behind, and the folder the copy lands in brings its own. Whether a deck copied from
+// a template is private, open to the team or open to anyone with the link is therefore not
+// something a caller can know from having made it — and "is it shared" is the first thing
+// asked about a file about to be sent to somebody.
+//
+// A reading that fails does not fail the call: the copy exists either way, and an answer
+// that hid it behind an error would invite making another.
+func reportAccess(ctx context.Context, client *google.Client, fileID string, payload map[string]any) {
+	permissions, err := client.Permissions(ctx, fileID)
+	if err != nil {
+		payload["permissions_unread"] = "the copy was made, but its permissions could not be read (" +
+			err.Error() + "): gdocs_drive_list_permissions reports them"
+
+		return
+	}
+
+	described, openToAnyone := describePermissions(permissions)
+	payload["permissions"] = described
+	payload["open_to_anyone_with_link"] = openToAnyone
+}
+
+// describePermissions renders the grants on a file, and says whether one of them opens it
+// to anyone holding the link.
+func describePermissions(permissions []google.Permission) ([]map[string]any, bool) {
+	described := make([]map[string]any, 0, len(permissions))
+	openToAnyone := false
+
+	for _, permission := range permissions {
+		if permission.Type == "anyone" {
+			openToAnyone = true
+		}
+		entry := map[string]any{"id": permission.ID, "type": permission.Type, "role": permission.Role}
+		putString(entry, "email", permission.EmailAddress)
+		putString(entry, "domain", permission.Domain)
+		putString(entry, "name", permission.DisplayName)
+		described = append(described, entry)
+	}
+
+	return described, openToAnyone
 }
 
 // describeFile renders a file the way a caller reads it.

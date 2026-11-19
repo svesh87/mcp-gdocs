@@ -75,6 +75,17 @@ type Options struct {
 	// widens a window, never the ceiling — a caller can only put names here that the
 	// configuration already allowed.
 	AlsoOffer []string
+	// Version is the build this server is, as main was given it at link time. It has one
+	// reader: gdocs_reference reports it, so that a transcript in which a tool misbehaved
+	// says which build that was.
+	Version string
+	// MayShare says the operator named drive-share at startup, whichever window this
+	// registry serves. One tool outside Drive's own family consults it:
+	// gdocs_slides_insert_image opens an uploaded picture to anyone with the link for the
+	// moment Slides needs to fetch it, and that is sharing — so it happens only where
+	// sharing was allowed at all. A window on slides has no drive-share in its own groups,
+	// which is why this is carried beside them rather than read out of them.
+	MayShare bool
 }
 
 type registry struct{ opts Options }
